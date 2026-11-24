@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Pieces</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/pieces.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script>
+// Pieces: real music with rhythm. Three ways to play one:
+//   Wait for me   the score waits until you play the right notes (learn the notes first)
+//   Play along    metronome and count-in; every note is judged for pitch and timing
+//   Listen        hear it, with the playhead following the score
+// Practise one hand and let the other one play by itself, or play both.
+(() => {
+  const T = Theory;
+  const { h } = UI;
+  const page = UI.page({ drill: 'pieces', title: 'Pieces', hud: false, tools: ['midi', 'sound', 'keyboard'], keyboard: { lo: 36, hi: 84 }, onSettings() {} });
+  const stage = page.el.prompt.parentElement;
+  const HANDS = { rh: 'Right hand', lh: 'Left hand', both: 'Both hands' };
+  const LEVELS = { 1: 'Level 1 · one hand', 2: 'Level 2 · both hands, simple', 3: 'Level 3 · both hands, more going on' };
+
+  const prefsKey = 'pieces:settings';
+  const settings = Object.assign({ mode: 'wait', metronome: true, accomp: true }, UI.store.get(prefsKey, {}));
+  const saveSettings = () => UI.store.set(prefsKey, settings);
+  const pieceSettings = p => Object.assign({ bpm: p.tempo, hands: p.rh && p.lh ? 'both' : p.rh ? 'rh' : 'lh' }, UI.store.get('pieces:piece:' + p.id, {}));
+  const best = () => UI.store.get('pieces:best', {});
+
+  const keyName = p => UI.keyName({ fifths: p.key || 0, minor: /minor/i.test(p.title) });
+  const handsOf = p => p.rh && p.lh ? 'both hands' : p.rh ? 'right hand' : 'left hand';
+
+  // ---------- the library ----------
+  function library() {
+    stop();
+    document.title = `Pieces · ${(self.EDITION || {}).name || 'Music Academy'}`;
+    stage.className = 'stage wide';
+    stage.innerHTML = '';
+    const b = best();
+    stage.append(h('div', { class: 'lib-intro' },
+      h('h2', {}, 'Pieces'),
+      h('p', { class: 'muted' }, 'Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.')));
+    for (const level of [1, 2, 3]) {
+      const ps = PIECES.filter(p => p.level === level);
+      if (!ps.length) continue;
+      stage.append(h('h3', { class: 'lib-level' }, LEVELS[level]));
+      stage.append(h('div', { class: 'lib-grid' }, ps.map(p => {
+        const scores = Object.entries(b).filter(([k]) => k.startsWith(p.id + ':')).map(([, v]) => v.score);
+        return h('a', { class: 'pcard', href: '#' + p.id },
+          h('div', { class: 'pcard-title' }, p.title),
+          h('div', { class: 'pcard-by' }, p.by),
+          h('div', { class: 'pcard-meta' }, `${keyName(p)} · ${p.time.join('/')} · ${handsOf(p)} · ♩ = ${p.tempo}`),
+          h('p', {}, p.about),
+          h('div', { class: 'pcard-best' }, scores.length ? `Best: ${Math.max(...scores)} %` : ''));
+      })));
+    }
+  }
+
+  // ---------- one piece ----------
+  let P = null, PS = null, L = null, run = null;
+  const els = {};
+
+  function open(id) {
+    stop();
+    P = PIECES.find(p => p.id === id);
+    if (!P) return library();
+    PS = pieceSettings(P);
+    if (!(P.rh && P.lh)) PS.hands = P.rh ? 'rh' : 'lh';
+    document.title = `${P.title} · ${(self.EDITION || {}).name || 'Music Academy'}`;
+    stage.className = 'stage wide';
+    stage.innerHTML = '';
+    els.status = h('div', { class: 'pstatus' });
+    els.score = h('div', { class: 'card score-card' });
+    els.result = h('div', { class: 'presult' });
+    els.start = h('button', { class: 'btn primary big', onclick: () => run ? stop(true) : start() }, '▶ Start');
+    els.tempoOut = h('span', { class: 'num' });
+    const tempo = h('input', { type: 'range', min: 30, max: 200, value: PS.bpm, oninput: e => { PS.bpm = +e.target.value; tempoLabel(); savePiece(); } });
+    const tempoLabel = () => { els.tempoOut.textContent = `♩ = ${PS.bpm}` + (PS.bpm !== P.tempo ? ` (${Math.round(PS.bpm / P.tempo * 100)} %)` : ''); };
+    tempoLabel();
+    const seg = (options, value, onPick) => {
+      const el = h('div', { class: 'seg' });
+      const draw = v => { el.innerHTML = ''; for (const [id, label] of options) el.append(h('button', { class: id === v ? 'on' : '', onclick: () => { if (run) stop(); onPick(id); draw(id); } }, label)); };
+      draw(value);
+      return el;
+    };
+    const toggle = (key, label) => h('label', { class: 'tgl' },
+      h('input', { type: 'checkbox', checked: settings[key], onchange: e => { settings[key] = e.target.checked; saveSettings(); } }), label);
+
+    stage.append(
+      h('div', { class: 'phead' },
+        h('a', { class: 'back', href: '#' }, '‹ All pieces'),
+        h('h2', {}, P.title),
+        h('div', { class: 'muted' }, P.by),
+        h('div', { class: 'pcard-meta' }, `${keyName(P)} · ${P.time.join('/')} · ${handsOf(P)}`),
+        h('p', { class: 'pabout' }, P.about)),
+      h('div', { class: 'controls' },
+        h('div', { class: 'ctl' }, h('span', {}, 'Mode'), seg([['wait', 'Wait for me'], ['play', 'Play along'], ['listen', 'Listen']], settings.mode, v => { settings.mode = v; saveSettings(); refreshControls(); })),
+        P.rh && P.lh ? h('div', { class: 'ctl' }, h('span', {}, 'Hands'), seg(Object.entries(HANDS), PS.hands, v => { PS.hands = v; savePiece(); render(); refreshControls(); })) : null,
+        h('div', { class: 'ctl tempo' }, h('span', {}, 'Tempo'), tempo, els.tempoOut),
+        els.toggles = h('div', { class: 'ctl toggles' }, toggle('metronome', 'Metronome'),
+          els.accomp = toggle('accomp', 'Play the other hand for me')),
+        h('div', { class: 'ctl go' }, els.start, els.status)),
+      els.score, els.result);
+    refreshControls();
+    render();
+    const all = [P.rh, P.lh].filter(Boolean).flatMap(v => Score.parseVoice(v, 'x').events.flatMap(e => e.notes.map(T.midi)));
+    page.kb.setRange(Math.min(...all) - 2, Math.max(...all) + 2);
+  }
+  function savePiece() { UI.store.set('pieces:piece:' + P.id, { bpm: PS.bpm, hands: PS.hands }); }
+  function refreshControls() {
+    els.accomp.style.display = P.rh && P.lh && PS.hands !== 'both' && settings.mode !== 'listen' ? '' : 'none';
+    els.status.textContent = { wait: 'Play each note when it lights up; the score waits for you.', play: 'Count in, then play along. Every note is judged for pitch and timing.', listen: 'Hear it played, with the playhead.' }[settings.mode];
+  }
+
+  function render() {
+    const width = Math.max(44, Math.min(120, Math.round((els.score.clientWidth || 900) / 10.5)));
+    L = Score.layout(P, { width });
+    els.score.innerHTML = L.svg;
+    els.svg = els.score.querySelector('svg');
+    els.ph = els.svg.querySelector('.playhead');
+    els.ev = [...els.svg.querySelectorAll('.ev')].reduce((m, g) => (m[g.dataset.i] = g, m), {});
+    for (const e of L.events) if (!practiced(e)) els.ev[e.i].classList.add('dim');
+  }
+  const practiced = e => PS.hands === 'both' || e.voice === PS.hands;
+  const cls = (e, c) => { const g = els.ev[e.i]; g.classList.remove('cur', 'good', 'off', 'bad'); if (c) g.classList.add(c); };
+
+  function playheadAt(t) {
+    const m = L.marks;
+    let i = 0;
+    while (i + 1 < m.length && m[i + 1].t <= t) i++;
+    const a = m[i], b = m[i + 1];
+    let x = a.x;
+    if (b && b.sys === a.sys && b.t > a.t) x = a.x + (b.x - a.x) * Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)));
+    const box = L.systems[a.sys];
+    els.ph.setAttribute('x', x - 8); els.ph.setAttribute('y', box.top); els.ph.setAttribute('height', box.bottom - box.top);
+    els.ph.classList.add('on');
+    if (run && run.sys !== a.sys) { run.sys = a.sys; els.ph.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+
+  // ---------- running ----------
+  function start() {
+    if (run) stop();
+    Sound.unlock();
+    render();
+    els.result.innerHTML = '';
+    page.kb.clear();
+    els.start.textContent = '■ Stop';
+    if (settings.mode === 'wait') startWait();
+    else startTimed(settings.mode === 'listen');
+  }
+  function stop(byUser) {
+    if (!run) return;
+    run.tr && run.tr.stop();
+    cancelAnimationFrame(run.raf);
+    const r = run;
+    run = null;
+    if (els.start) els.start.textContent = '▶ Start';
+    if (els.ph) els.ph.classList.remove('on');
+    if (byUser && r.mode !== 'listen') els.result.innerHTML = '<p class="muted">Stopped. Start again when you are ready.</p>';
+  }
+
+  // wait for me: the next notes light up; play them (any order, all of them), then it moves on
+  function startWait() {
+    const byT = new Map();
+    for (const e of L.events) if (practiced(e) && !e.rest) (byT.get(e.t) || byT.set(e.t, []).get(e.t)).push(e);
+    const steps = [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([t, evs]) => ({ t, evs, need: new Set(evs.flatMap(e => e.midis)) }));
+    run = { mode: 'wait', steps, i: 0, got: new Set(), wrong: 0, clean: 0, missed: false, t0: performance.now(), sys: -1 };
+    show();
+    function show() {
+      const s = steps[run.i];
+      s.evs.forEach(e => cls(e, 'cur'));
+      playheadAt(s.t);
+    }
+    run.onNote = (m) => {
+      const s = steps[run.i];
+      if (s.need.has(m)) {
+        run.got.add(m);
+        if ([...s.need].every(x => run.got.has(x))) {
+          s.evs.forEach(e => cls(e, run.missed ? 'off' : 'good'));
+          if (!run.missed) run.clean++;
+          // the other hand, up to the next step
+          if (settings.accomp && PS.hands !== 'both') {
+            const next = run.i + 1 < steps.length ? steps[run.i + 1].t : L.length;
+            const spb = 60 / PS.bpm;
+            for (const e of L.events) if (!practiced(e) && !e.rest && e.t >= s.t && e.t < next) Sound.chord(e.midis, { at: (e.t - s.t) * spb, dur: e.d * spb * 0.95, vel: 0.45 });
+          }
+          run.i++; run.got.clear(); run.missed = false; page.kb.clear();
+          if (run.i >= steps.length) return finishWait();
+          show();
+        }
+      } else {
+        run.wrong++;
+        run.missed = true;
+        page.kb.mark(m, 'bad');
+        s.need.forEach(x => page.kb.mark(x, 'hint'));
+        s.evs.forEach(e => els.ev[e.i].classList.add('cur'));
+      }
+    };
+  }
+  function finishWait() {
+    const r = run;
+    const secs = (performance.now() - r.t0) / 1000;
+    const score = Math.round(r.clean / r.steps.length * 100);
+    stop();
+    els.result.innerHTML = '';
+    els.result.append(resultBox(score, [
+      `${r.clean} of ${r.steps.length} steps without a slip`,
+      `${r.wrong} wrong note${r.wrong === 1 ? '' : 's'}`,
+      `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, '0')} minutes`,
+    ], score >= 90 ? 'Ready for “Play along”.' : 'Again, until it flows.'));
+    saveBest('wait', score);
+  }
+
+  // play along / listen: the transport runs; notes are judged against the beat
+  function startTimed(listen) {
+    const [num] = P.time;
+    const countIn = listen ? 0 : L.L; // playing along: always a bar to count in
+    const tr = Transport.create({
+      bpm: PS.bpm,
+      onStep: (s, time) => {
+        const b = s - countIn;
+        if (b >= L.length) return;
+        if (b < 0 || settings.metronome) Sound.click(time, ((s % num) + num) % num === 0 ? 2 : 1, b < 0 ? 1 : 0.8);
+      },
+    });
+    const spb = tr.spb;
+    for (const e of L.events) {
+      if (e.rest) continue;
+      const mine = practiced(e);
+      if (listen || (!mine && settings.accomp)) tr.at(e.t + countIn, time => Sound.chord(e.midis, { when: time, dur: e.d * spb * 0.93, vel: mine ? 0.6 : 0.45 }));
+    }
+    const expected = [];
+    if (!listen) for (const e of L.events) if (practiced(e) && !e.rest) {
+      e.judge = { n: e.midis.length, hit: 0, good: 0, miss: 0 };
+      for (const m of e.midis) expected.push({ e, m, beat: e.t + countIn, done: false });
+    }
+    const msBeat = tr.msPerBeat;
+    run = {
+      mode: listen ? 'listen' : 'play', tr, countIn, expected, sys: -1,
+      win: Math.min(300, Math.max(120, 0.45 * msBeat)), good: Math.max(45, 0.1 * msBeat), offsets: [], wrong: 0,
+    };
+    tr.start();
+    const loop = () => {
+      if (!run) return;
+      const beat = tr.beatNow(), b = beat - countIn;
+      if (b < 0) {
+        els.status.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span>`;
+        els.ph.classList.remove('on');
+      } else {
+        els.status.textContent = `Bar ${Math.min(L.bars, Math.floor(b / L.L) + 1)} of ${L.bars}`;
+        playheadAt(b);
+        if (listen) for (const e of L.events) if (!e.rest) {
+          const on = b >= e.t && b < e.t + e.d;
+          if (on !== els.ev[e.i].classList.contains('cur')) els.ev[e.i].classList.toggle('cur', on);
+        }
+      }
+      // notes not played in time count as missed
+      if (!listen) {
+        const late = beat - run.win / msBeat;
+        for (const x of expected) if (!x.done && x.beat < late) { x.done = true; x.e.judge.miss++; settle(x.e); }
+      }
+      if (b > L.length + 0.4) return listen ? (stop(), refreshControls()) : finishPlay();
+      run.raf = requestAnimationFrame(loop);
+    };
+    run.raf = requestAnimationFrame(loop);
+    run.onNote = (m, time) => {
+      if (listen) return;
+      const at = tr.beatOfPerf(time - (UI.prefs.latency || 0));
+      let bestX = null;
+      for (const x of expected) if (!x.done && x.m === m && Math.abs(at - x.beat) * msBeat <= run.win && (!bestX || Math.abs(at - x.beat) < Math.abs(at - bestX.beat))) bestX = x;
+      if (!bestX) { run.wrong++; page.kb.mark(m, 'bad'); setTimeout(() => page.kb.clear(), 300); return; }
+      bestX.done = true;
+      const off = (at - bestX.beat) * msBeat;
+      run.offsets.push(off);
+      bestX.e.judge.hit++;
+      if (Math.abs(off) <= run.good) bestX.e.judge.good++;
+      settle(bestX.e);
+    };
+  }
+  function settle(e) {
+    const j = e.judge;
+    if (j.hit + j.miss < j.n) return;
+    cls(e, j.miss ? 'bad' : j.good === j.n ? 'good' : 'off');
+  }
+  function finishPlay() {
+    const r = run;
+    stop();
+    const total = r.expected.length;
+    const hit = r.offsets.length;
+    const onTime = r.offsets.filter(o => Math.abs(o) <= r.good).length;
+    const mean = hit ? r.offsets.reduce((a, b) => a + b, 0) / hit : 0;
+    const sd = hit > 1 ? Math.sqrt(r.offsets.reduce((a, o) => a + (o - mean) ** 2, 0) / (hit - 1)) : 0;
+    const score = Math.max(0, Math.round((onTime + 0.6 * (hit - onTime)) / total * 100 - r.wrong));
+    const lean = Math.abs(mean) < 12 ? 'right on the beat' : mean > 0 ? `${Math.round(mean)} ms late on average (dragging)` : `${Math.round(-mean)} ms early on average (rushing)`;
+    els.result.innerHTML = '';
+    els.result.append(resultBox(score, [
+      `${hit} of ${total} notes played (${Math.round(hit / total * 100)} %)`,
+      `${onTime} on time (within ±${Math.round(r.good)} ms)`,
+      hit ? `${lean}, spread ±${Math.round(sd)} ms` : '',
+      `${r.wrong} wrong note${r.wrong === 1 ? '' : 's'}`,
+    ].filter(Boolean), advice(score, onTime === total && !r.wrong)));
+    saveBest(`play@${PS.bpm}`, score);
+  }
+  function advice(score, clean) {
+    const fast = PS.bpm >= P.tempo;
+    if (clean) return fast ? 'Clean at full tempo. Next piece?' : 'Clean: try it a little faster.';
+    if (score >= 90) return 'Very good, with a slip or two. Once more?';
+    if (score >= 60) return 'Getting there: once more, or a little slower.';
+    return 'Slow it down (tempo slider) or use “Wait for me” first.';
+  }
+  function resultBox(score, lines, advice) {
+    return h('div', { class: 'card result-card' },
+      h('div', { class: 'big-score' }, score + ' %'),
+      h('ul', {}, lines.map(l => h('li', {}, l))),
+      h('p', { class: 'advice' }, advice),
+      h('button', { class: 'btn primary', onclick: () => start() }, '↻ Again'));
+  }
+  function saveBest(kind, score) {
+    const b = best();
+    const k = `${P.id}:${PS.hands}:${kind}`;
+    if (!b[k] || b[k].score < score) { b[k] = { score, date: Date.now() }; UI.store.set('pieces:best', b); }
+  }
+
+  Input.on(e => { if (e.type === 'on' && run && run.onNote) run.onNote(e.midi, e.time); });
+  addEventListener('keydown', e => {
+    if (e.code === 'Space' && P && location.hash && !e.target.closest('dialog, input')) { e.preventDefault(); run ? stop(true) : start(); }
+  });
+  let resizeTimer;
+  addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (P && !run && location.hash) render(); }, 200); });
+
+  const route = () => { const id = decodeURIComponent(location.hash.slice(1)); id ? open(id) : (P = null, library()); };
+  addEventListener('hashchange', route);
+  self.__state = () => ({ run, L, P, PS }); // for the end-to-end test
+  route();
+})();
+</script>
+</body>
+</html>

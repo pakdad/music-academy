@@ -54,7 +54,7 @@
       el.setPointerCapture?.(e.pointerId);
       down.set(e.pointerId, m);
       if (sound) Sound.note(m, { dur: 0.6 });
-      Input.press(m);
+      Input.press(m, 0.7, e.timeStamp);
     });
     el.addEventListener('pointermove', e => {
       if (!down.has(e.pointerId)) return;
@@ -63,7 +63,7 @@
       Input.release(down.get(e.pointerId));
       down.set(e.pointerId, m);
       if (sound) Sound.note(m, { dur: 0.6 });
-      Input.press(m);
+      Input.press(m, 0.7, e.timeStamp);
     });
     const up = e => { if (!down.has(e.pointerId)) return; Input.release(down.get(e.pointerId)); down.delete(e.pointerId); };
     el.addEventListener('pointerup', up);

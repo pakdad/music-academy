@@ -19,7 +19,8 @@
     keys() { const out = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith(P + ':')) out.push(k.slice(P.length + 1)); } } catch (e) {} return out; },
   };
 
-  const prefs = Object.assign({ names: 'en', sound: true, feedback: true, keyboard: true }, store.get('prefs', {}));
+  // latency: how late (ms) this setup's played notes arrive compared to what is heard, measured in the metronome
+  const prefs = Object.assign({ names: 'en', sound: true, feedback: true, keyboard: true, latency: 0 }, store.get('prefs', {}));
   const setPref = (k, v) => { prefs[k] = v; store.set('prefs', prefs); applyPrefs(); };
   function applyPrefs() {
     if (self.Sound) { Sound.enabled = prefs.sound; Sound.feedback = prefs.feedback; }
@@ -171,7 +172,9 @@
     const setBtn = h('button', { class: 'icon', title: 'Settings', onclick: () => openSettings() }, '⚙️');
     const bar = h('header', { class: 'bar' },
       h('a', { class: 'home', href: '/', title: ED.name || 'Home' }, '‹'),
-      h('h1', {}, title), hud, h('div', { class: 'tools' }, midiDot, soundBtn, kbBtn, statsBtn, setBtn));
+      h('h1', {}, title), opts.hud === false ? null : hud,
+      h('div', { class: 'tools' }, ...Object.entries({ midi: midiDot, sound: soundBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
+        .filter(([id]) => (opts.tools || ['midi', 'sound', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
     const prompt = h('div', { class: 'prompt' });
     const card = h('div', { class: 'card' });
     const feedback = h('div', { class: 'feedback' });

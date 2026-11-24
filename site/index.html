@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#4338ca">
+<meta name="theme-color" content="#17161a">
 <meta name="description" content="Music theory practice: note reading, key signatures, chords, scales and progressions, with a MIDI keyboard or on screen.">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -106,10 +106,10 @@
     const el = $('#drills');
     el.innerHTML = '';
     let today = 0;
-    for (const d of DRILLS.filter(d => d.instrument === instrument && d.audience.includes(ED.audience))) {
+    for (const d of DRILLS.filter(d => (d.instrument === instrument || d.instrument === 'any') && d.audience.includes(ED.audience))) {
       const s = UI.summary(d.id);
       today += s.today;
-      const st = s.today
+      const st = d.noStats ? null : s.today
         ? h('div', { class: 'st', html: `Today <b>${s.today}</b> · ${Math.round(s.acc * 100)} % · ⏱ ${s.avg ? UI.sec(s.avg) : '–'} · ${s.total} in all` })
         : h('div', { class: 'st' }, s.total ? `${s.total} answered · last ${new Date(s.last).toLocaleDateString()}` : 'Not started yet');
       el.append(h('a', { class: 'drill', href: '/' + d.path },
