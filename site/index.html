@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#17161a">
-<meta name="description" content="Music theory practice: note reading, key signatures, chords, scales and progressions, with a MIDI keyboard or on screen.">
+<meta name="description" content="Music practice for piano and guitar: note reading, key signatures, chords, scales, progressions, rhythm, pieces, tab, strumming and a tuner.">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -13,145 +13,114 @@
 <script src="/shared/i18n-de.js"></script>
 <script src="/shared/i18n.js"></script>
 <title>Music Academy</title>
-<style>
-  body { overflow-y: auto; }
-  .home-wrap { max-width: 1040px; margin: 0 auto; padding: 28px 18px 40px; width: 100%; }
-  .hero { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .hero img { width: 54px; height: 54px; border-radius: 13px; }
-  .hero h1 { margin: 0; font-size: 28px; }
-  .hero p { margin: 0; color: var(--muted); }
-  .hero .midi { margin-left: auto; }
-  .tabs { display: flex; gap: 6px; margin: 26px 0 14px; }
-  .tab { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 16px; font-weight: 600; cursor: pointer; }
-  .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .tab[disabled] { opacity: .5; cursor: default; }
-  .today { color: var(--muted); margin: 0 0 14px; }
-  .today b { color: var(--ink); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-  .drill { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); text-decoration: none; color: inherit; border: 1px solid transparent; transition: border-color .15s, transform .1s; }
-  .drill:hover { border-color: var(--accent); }
-  .drill:active { transform: translateY(1px); }
-  .drill .top { display: flex; align-items: center; gap: 12px; }
-  .drill .ic { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font: 600 19px Georgia, serif; flex: none; white-space: nowrap; letter-spacing: -.5px; }
-  .drill h2 { margin: 0; font-size: 18px; }
-  .drill p { margin: 0; color: var(--muted); font-size: 14.5px; }
-  .drill .st { margin-top: auto; padding-top: 8px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .drill .st b { color: var(--ink); }
-  section.prefs { margin-top: 34px; padding: 18px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); display: grid; gap: 16px; }
-  section.prefs h2 { margin: 0; font-size: 17px; }
-  .pref { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  .pref > span { min-width: 140px; font-weight: 600; font-size: 15px; }
-  footer { margin-top: 28px; color: var(--muted); font-size: 13px; line-height: 1.6; }
-</style>
 </head>
-<body>
-<div class="home-wrap">
-  <header class="hero">
-    <img src="/icon.svg" alt="">
-    <div>
-      <h1 id="name">Music Academy</h1>
-      <p data-t>Read faster, find the key, know the chords: music practice for piano and guitar.</p>
-    </div>
-    <button class="midi" id="midi"><span class="dot"></span><span class="midi-text">MIDI</span></button>
-  </header>
-
-  <nav class="tabs" id="tabs"></nav>
-  <p class="today" id="today"></p>
-  <div class="grid" id="drills"></div>
-
-  <section class="prefs">
-    <h2 data-t>Settings</h2>
-    <div class="pref"><span data-t>Language</span><div class="seg" id="lang"></div></div>
-    <div class="pref"><span data-t>Look</span><div class="seg" id="theme"></div></div>
-    <div class="pref"><span data-t>Note names</span><div class="seg" id="names"></div></div>
-    <div class="pref"><span data-t>Sound</span><div class="seg" id="sound"></div></div>
-    <div class="pref"><span data-t>Guitar tuning</span><div class="seg" id="gtuning"></div></div>
-    <div class="pref"><span data-t>Capo</span><div class="seg" id="gcapo"></div></div>
-    <div class="pref"><span data-t>Guitar fretboard</span><div class="seg" id="gleft"></div></div>
-    <div class="pref"><span data-t>Your progress</span>
-      <button class="btn" id="export" data-t>Save to a file</button>
-      <button class="btn ghost" id="import" data-t>Load from a file</button>
+<body class="homepage">
+<header class="bar home-bar">
+  <a class="brand" href="/"><img src="/icon.svg" alt=""><span id="name">Music Academy</span></a>
+  <div class="tools"><button class="iconbtn" id="openSettings"></button></div>
+</header>
+<main class="home">
+  <section class="hello">
+    <h1 id="greeting"></h1>
+    <p class="muted" data-t>Read faster, find the key, know the chords: music practice for piano and guitar.</p>
+    <div class="instr" id="tabs" role="tablist"></div>
+  </section>
+  <div id="continue"></div>
+  <div id="sections"></div>
+  <section class="card block" id="progress">
+    <h2><span id="progIcon"></span><span data-t>Your progress</span></h2>
+    <p class="muted" data-t>Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.</p>
+    <div class="row left">
+      <button class="btn" id="export"></button>
+      <button class="btn ghost" id="import"></button>
       <input type="file" id="file" accept="application/json" hidden>
     </div>
-    <p class="hint" style="margin:0" data-t>Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.</p>
   </section>
-
   <footer>
     <span data-t>Piano: best with a digital piano over USB or Bluetooth MIDI, in Chrome or Edge; without one, use the on-screen keyboard or the answer buttons. Guitar: the microphone listens (allow it when asked), or click the fretboard. Install it as an app from the browser's menu; it then works offline.</span><br>
     <span data-t>Music font:</span> <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
   </footer>
-</div>
+</main>
 
 <script src="/shared/theory.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/drills.js"></script>
 <script src="/shared/guitar.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 (() => {
   const { h, $ } = UI;
   const ED = self.EDITION;
   $('#name').textContent = ED.name;
   document.title = ED.name;
+  const hour = new Date().getHours();
+  $('#greeting').textContent = hour < 5 ? t('Good evening') : hour < 12 ? t('Good morning') : hour < 18 ? t('Good afternoon') : t('Good evening');
+  const gear = $('#openSettings');
+  gear.append(Icons.el('settings'), h('span', { class: 'label' }, t('Settings')));
+  gear.classList.add('wide');
+  gear.title = t('Settings'); gear.setAttribute('aria-label', t('Settings'));
+  gear.onclick = () => Toolbox.open('settings');
 
-  // instruments: only those this edition has are live; guitar is coming
-  const INSTRUMENTS = [['piano', 'Piano'], ['guitar', 'Guitar']];
+  // piano or guitar
+  const INSTRUMENTS = [['piano', t('Piano'), 'piano'], ['guitar', t('Guitar'), 'guitar']];
   let instrument = UI.store.get('instrument', ED.instruments[0]);
   if (!ED.instruments.includes(instrument)) instrument = ED.instruments[0];
   function tabs() {
     const el = $('#tabs');
     el.innerHTML = '';
-    for (const [id, label] of INSTRUMENTS) {
+    for (const [id, label, icon] of INSTRUMENTS) {
       const live = ED.instruments.includes(id);
-      el.append(h('button', { class: 'tab' + (id === instrument ? ' on' : ''), disabled: !live, title: live ? '' : t('Coming later'),
-        onclick: () => { instrument = id; UI.store.set('instrument', id); tabs(); drills(); } }, t(label) + (live ? '' : ' · ' + t('soon'))));
+      el.append(h('button', { role: 'tab', 'aria-selected': id === instrument ? 'true' : 'false', class: 'instr-btn' + (id === instrument ? ' on' : ''), disabled: !live,
+        onclick: () => { instrument = id; UI.store.set('instrument', id); tabs(); drills(); } }, Icons.el(icon, 26), h('span', {}, label)));
     }
   }
 
+  const drillUrl = d => '/' + d.path;
+  function stat(d) {
+    if (d.noStats) return null;
+    const s = UI.summary(d.id);
+    if (s.today) return h('div', { class: 'dstat' }, h('span', { class: 'pill good' }, t('Today {n}', { n: s.today })), h('span', {}, `${Math.round(s.acc * 100)} %`), s.avg ? h('span', {}, '⌀ ' + UI.sec(s.avg)) : null);
+    if (s.total) return h('div', { class: 'dstat' }, h('span', { class: 'pill' }, t('{n} answered', { n: s.total })));
+    return h('div', { class: 'dstat' }, h('span', { class: 'pill new' }, t('New')));
+  }
   function drills() {
-    const el = $('#drills');
-    el.innerHTML = '';
+    const list = DRILLS.filter(d => (d.instrument === instrument || d.instrument === 'any') && d.audience.includes(ED.audience));
+    // continue where you left off
+    const sessions = UI.store.get('sessions', []).filter(s => list.some(d => d.id === s.drill));
+    const last = sessions.length ? list.find(d => d.id === sessions[sessions.length - 1].drill) : null;
+    const cont = $('#continue');
+    cont.innerHTML = '';
     let today = 0;
-    for (const d of DRILLS.filter(d => (d.instrument === instrument || d.instrument === 'any') && d.audience.includes(ED.audience)).sort((a, b) => (a.instrument === 'any') - (b.instrument === 'any'))) {
-      const s = UI.summary(d.id);
-      today += s.today;
-      const st = d.noStats ? null : s.today
-        ? h('div', { class: 'st', html: t('Today <b>{n}</b> · {acc} % · ⏱ {avg} · {total} in all', { n: s.today, acc: Math.round(s.acc * 100), avg: s.avg ? UI.sec(s.avg) : '–', total: s.total }) })
-        : h('div', { class: 'st' }, s.total ? t('{n} answered · last {date}', { n: s.total, date: new Date(s.last).toLocaleDateString(I18N.lang) }) : t('Not started yet'));
-      el.append(h('a', { class: 'drill', href: '/' + d.path },
-        h('div', { class: 'top' }, h('div', { class: 'ic' }, d.icon), h('h2', {}, tr(d, 'name'))),
-        h('p', {}, tr(d, 'about')), st));
-    }
-    // days in a row with some practice
+    for (const d of list) today += UI.summary(d.id).today;
     const days = new Set(UI.store.get('sessions', []).map(s => new Date(s.start).toDateString()));
     let streak = 0;
-    for (let t = new Date(); days.has(t.toDateString()); t.setDate(t.getDate() - 1)) streak++;
-    $('#today').innerHTML = today
-      ? t('Today: <b>{n}</b> answers', { n: today }) + (streak > 1 ? ' · ' + t('<b>{n}</b> days in a row', { n: streak }) : '')
-      : streak ? t('Yesterday you practised: keep the streak going.') : t('Pick a drill. Ten focused minutes a day beats an hour a week.');
-  }
-
-  function seg(id, options, value, onPick) {
-    const el = $('#' + id);
+    for (let x = new Date(); days.has(x.toDateString()); x.setDate(x.getDate() - 1)) streak++;
+    if (last) cont.append(h('a', { class: 'continue', href: drillUrl(last) },
+      h('span', { class: 'dicon' }, Icons.el(last.icon, 40)),
+      h('span', { class: 'continue-text' }, h('small', {}, t('Continue')), h('b', {}, tr(last, 'name'))),
+      h('span', { class: 'continue-stats', html: [today ? t('Today: <b>{n}</b> answers', { n: today }) : '', streak > 1 ? t('<b>{n}</b> days in a row', { n: streak }) : ''].filter(Boolean).join(' · ') }),
+      Icons.el('chevron', 26)));
+    else cont.append(h('p', { class: 'muted today' }, t('Pick a drill. Ten focused minutes a day beats an hour a week.')));
+    // the drills, in sections
+    const el = $('#sections');
     el.innerHTML = '';
-    for (const [v, label] of options) el.append(h('button', { class: v === value ? 'on' : '', onclick: () => { onPick(v); seg(id, options, v, onPick); } }, label));
+    for (const [sid, title] of SECTIONS) {
+      const ds = list.filter(d => d.section === sid);
+      if (!ds.length) continue;
+      el.append(h('section', { class: 'dsection' }, h('h2', {}, t(title)), h('div', { class: 'dgrid' }, ds.map(d =>
+        h('a', { class: 'dcard', href: drillUrl(d) },
+          h('span', { class: 'dicon' }, Icons.el(d.icon, 44)),
+          h('span', { class: 'dtext' }, h('b', {}, tr(d, 'name')), h('span', { class: 'dabout' }, tr(d, 'about')), stat(d)))))));
+    }
   }
-  seg('lang', [['en', 'English'], ['de', 'Deutsch']], I18N.lang, v => { UI.setPref('names', v); UI.setPref('lang', v); });
-  seg('theme', [['color', t('pakdad.com colours')], ['mono', t('Black & white')]], I18N.theme, v => UI.setPref('theme', v));
-  seg('names', [['en', t('English: C D E F G A B, B♭')], ['de', t('German: C D E F G A H, B')]], UI.prefs.names, v => UI.setPref('names', v));
-  const soundVal = () => UI.prefs.sound ? (UI.prefs.feedback ? 'all' : 'music') : 'off';
-  seg('sound', [['all', t('Music and clicks')], ['music', t('Music only')], ['off', t('Off')]], soundVal(), v => {
-    UI.setPref('sound', v !== 'off');
-    UI.setPref('feedback', v === 'all');
-  });
 
-  // guitar: shared by every guitar page (tuner, fretboard, chords …)
-  const G = () => UI.store.get('guitar', {});
-  const setG = (k, v) => { const g = G(); g[k] = v; UI.store.set('guitar', g); };
-  seg('gtuning', Object.entries(Guitar.TUNINGS).map(([id, tu]) => [id, t(tu.name)]), G().tuning || 'standard', v => setG('tuning', v));
-  seg('gcapo', [0, 1, 2, 3, 4, 5, 7].map(n => [n, n ? t('Fret {n}', { n }) : t('None')]), G().capo || 0, v => setG('capo', v));
-  seg('gleft', [[false, t('Right-handed')], [true, t('Left-handed (mirrored)')]], !!G().left, v => setG('left', v));
+  // progress to and from a file
+  $('#progIcon').append(Icons.el('download', 22));
+  $('#export').append(Icons.el('download', 18), t('Save to a file'));
+  $('#import').append(Icons.el('upload', 18), t('Load from a file'));
   $('#export').onclick = () => {
     const blob = new Blob([JSON.stringify(UI.exportData(), null, 1)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `${ED.slug}-progress-${new Date().toISOString().slice(0, 10)}.json` });
@@ -161,22 +130,11 @@
   $('#file').onchange = async e => {
     const f = e.target.files[0];
     if (!f) return;
-    try {
-      UI.importData(JSON.parse(await f.text()));
-      alert(t('Progress loaded.'));
-      location.reload();
-    } catch (err) { alert(t('That file could not be read:') + ' ' + err.message); }
+    try { UI.importData(JSON.parse(await f.text())); alert(t('Progress loaded.')); location.reload(); }
+    catch (err) { alert(t('That file could not be read:') + ' ' + err.message); }
   };
 
-  const midi = $('#midi');
-  Input.onStatus(({ state, devices }) => {
-    midi.dataset.state = state;
-    midi.querySelector('.midi-text').textContent = state === 'ready' ? devices.join(', ')
-      : state === 'none' ? t('No MIDI keyboard') : state === 'unsupported' ? t('No MIDI in this browser') : state === 'denied' ? t('MIDI blocked') : 'MIDI';
-  });
-  midi.onclick = () => Input.init();
   Input.init();
-
   tabs();
   drills();
   addEventListener('pageshow', drills);

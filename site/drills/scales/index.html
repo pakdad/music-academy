@@ -21,7 +21,9 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/keyboard.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Scales: play one (from the notes or from memory), name one from the staff, or tell scales apart by ear.
 // Items: "<type>:<tonic>" (play, name) and "hear:<type>".
@@ -197,7 +199,7 @@
     q = { item, type, tonic, notes: T.scale(tonic, type), missed: false };
     page.el.prompt.innerHTML = t('Which scale is this?') + '<small>' + t('Listen to its colour over the low tonic') + '</small>';
     page.el.card.innerHTML = '';
-    const replay = UI.h('button', { class: 'btn', onclick: () => playHear() }, '▶ ' + t('Play again'));
+    const replay = UI.h('button', { class: 'btn', onclick: () => playHear() }, UI.ilabel('play', t('Play again')));
     page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, replay));
     const right = T.SCALES[type].name;
     page.choices(types.map(ty => ({ label: sname(ty), value: ty })), (ty, btn) => {

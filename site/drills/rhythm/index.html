@@ -22,8 +22,10 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/keyboard.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Rhythm: read a rhythm on a one-line staff and tap it in time (any key, the pad, Space or J).
 // Exercises are built from rhythm figures ("cells"); each cell is an item in the statistics, so the
@@ -108,8 +110,8 @@
     el.answers.innerHTML = '';
     el.answers.append(
       h('div', { class: 'row' },
-        h('button', { class: 'btn', onclick: () => go(true) }, '▶ ' + t('Listen')),
-        h('button', { class: 'btn primary big', onclick: () => go(false) }, '● ' + t('Tap it')),
+        h('button', { class: 'btn', onclick: () => go(true) }, UI.ilabel('play', t('Listen'))),
+        h('button', { class: 'btn primary big', onclick: () => go(false) }, UI.ilabel('hand', t('Tap it'))),
         h('button', { class: 'btn ghost', onclick: () => next() }, t('New rhythm') + ' ›')),
       pad);
   }

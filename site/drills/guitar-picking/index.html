@@ -21,11 +21,13 @@
 <script src="/shared/score.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
 <script src="/shared/gplayer.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Picking: fingerpicking patterns over chords, written as notation and tab with the right-hand fingers on top
 // (p thumb, i index, m middle, a ring). Hold the chord, pick the pattern. Wait for me, play along, or listen.
@@ -43,7 +45,7 @@
   const status = h('div', { class: 'pstatus' });
   const result = h('div', { class: 'presult' });
   const board = h('div', { class: 'board' });
-  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, '▶ ' + t('Start'));
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, UI.ilabel('play', t('Start')));
   const progLabel = p => p.ids.map(id => Guitar.chordName(Guitar.chordById(id))).join(' – ');
   page.el.prompt.replaceWith(h('div', { class: 'controls' },
     h('div', { class: 'ctl' }, h('span', {}, t('Pattern')), seg(Guitar.PICKS.map(p => [p.id, t(p.name)]), () => st.pattern, v => { st.pattern = v; })),
@@ -55,7 +57,7 @@
   page.el.card.classList.add('score-card');
   page.el.card.after(board);
   board.after(result);
-  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.textContent = '▶ ' + t('Start'); } });
+  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.replaceChildren(UI.ilabel('play', t('Start'))); } });
 
   function build() {
     const pat = Guitar.PICKS.find(p => p.id === st.pattern) || Guitar.PICKS[0];
@@ -82,11 +84,11 @@
     Guitar.fretboard(board, { frets: 5, onPick });
   }
   function go() {
-    startBtn.textContent = '■ ' + t('Stop');
+    startBtn.replaceChildren(UI.ilabel('stop', t('Stop')));
     if (st.mode !== 'listen') Mic.start();
     player.start(st.mode, { bpm: st.bpm });
   }
-  function stopIt() { player.stop(); startBtn.textContent = '▶ ' + t('Start'); }
+  function stopIt() { player.stop(); startBtn.replaceChildren(UI.ilabel('play', t('Start'))); }
   function onPick(s, f) { const m = Guitar.midi(s, f); Sound.pluck(m, { dur: 1 }); if (player.running) player.input(m, performance.now()); }
   Mic.on('note', n => { if (player.running && player.mode !== 'listen') player.input(n.midi, n.time); });
   addEventListener('keydown', e => { if (e.code === 'Space' && !e.target.closest?.('dialog, input')) { e.preventDefault(); player.running ? stopIt() : go(); } });

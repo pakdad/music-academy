@@ -21,10 +21,12 @@
 <script src="/shared/score.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Strumming: patterns of down (↓) and up (↑) strums on eighth notes. Listen, then strum along with the metronome;
 // every strum is checked for timing (microphone), or tap Space / the pad / click instead.
@@ -40,8 +42,8 @@
   const tempo = h('input', { type: 'range', min: 40, max: 160, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
   const tempoOut = h('span', { class: 'num' }, `♩ = ${st.bpm}`);
   const status = h('div', { class: 'pstatus' });
-  const listenBtn = h('button', { class: 'btn', onclick: () => go(true) }, '▶ ' + t('Listen'));
-  const playBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go(false) }, '● ' + t('Strum along'));
+  const listenBtn = h('button', { class: 'btn', onclick: () => go(true) }, UI.ilabel('play', t('Listen')));
+  const playBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go(false) }, UI.ilabel('hand', t('Strum along')));
   const card = h('div', { class: 'card score-card' });
   const arrows = h('div', { class: 'arrows' });
   const feedback = h('div', { class: 'feedback' });
@@ -109,7 +111,7 @@
     const msBeat = tr.msPerBeat;
     run = { listen, tr, expected, win: Math.min(200, 0.35 * msBeat), good: Math.max(50, 0.12 * msBeat), hits: [], extra: 0 };
     tr.start();
-    playBtn.textContent = listen ? playBtn.textContent : '■ ' + t('Stop');
+    if (!listen) playBtn.replaceChildren(UI.ilabel('stop', t('Stop')));
     const slots = [...arrows.children];
     const loop = () => {
       if (!run) return;
@@ -146,7 +148,7 @@
   function stop() {
     if (!run) return;
     run.tr.stop(); cancelAnimationFrame(run.raf); run = null;
-    playBtn.textContent = '● ' + t('Strum along');
+    playBtn.replaceChildren(UI.ilabel('hand', t('Strum along')));
     [...arrows.children].forEach(el => el.classList.remove('on'));
   }
   function finish() {

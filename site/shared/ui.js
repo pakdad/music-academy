@@ -21,7 +21,13 @@
 
   // latency: how late (ms) this setup's played notes arrive compared to what is heard, measured in the metronome
   const prefs = Object.assign({ names: (self.I18N && I18N.lang) || 'en', sound: true, feedback: true, keyboard: true, latency: 0 }, store.get('prefs', {}));
-  const setPref = (k, v) => { prefs[k] = v; store.set('prefs', prefs); applyPrefs(); if (k === 'lang' || k === 'theme') location.reload(); };
+  // language needs a reload (texts are chosen as the page builds); look and light/dark change at once
+  const setPref = (k, v) => {
+    prefs[k] = v; store.set('prefs', prefs); applyPrefs();
+    if (k === 'lang') location.reload();
+    if (k === 'theme') document.documentElement.dataset.theme = v === 'mono' ? 'mono' : 'color';
+    if (k === 'mode') { if (v === 'light' || v === 'dark') document.documentElement.dataset.mode = v; else delete document.documentElement.dataset.mode; }
+  };
   function applyPrefs() {
     if (self.Sound) { Sound.enabled = prefs.sound; Sound.feedback = prefs.feedback; }
     document.documentElement.classList.toggle('no-keyboard', !prefs.keyboard);
@@ -168,23 +174,24 @@
     document.title = `${t(title)} · ${ED.name || 'Music Academy'}`;
     const app = $('#app');
     const hud = h('div', { class: 'hud' });
-    const midiDot = h('button', { class: 'midi', title: 'MIDI', onclick: () => showMidiHelp() }, h('span', { class: 'dot' }), h('span', { class: 'midi-text' }, 'MIDI'));
-    const soundBtn = h('button', { class: 'icon', title: t('Sound on/off'), onclick: () => { setPref('sound', !prefs.sound); soundBtn.textContent = prefs.sound ? '🔊' : '🔇'; } }, prefs.sound ? '🔊' : '🔇');
-    const kbBtn = h('button', { class: 'icon', title: t('On-screen keyboard'), onclick: () => setPref('keyboard', !prefs.keyboard) }, '🎹');
-    const statsBtn = h('button', { class: 'icon', title: t('Weak spots'), onclick: () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)) }, '📊');
-    const setBtn = h('button', { class: 'icon', title: t('Settings'), onclick: () => openSettings() }, '⚙️');
-    // the microphone (guitar pages): shows whether we listen, and turns it on or off
-    const micBtn = h('button', { class: 'midi micbtn', title: t('Microphone'), onclick: () => self.Mic && (Mic.state === 'on' ? Mic.stop() : Mic.start()) },
-      h('span', { class: 'dot' }), h('span', { class: 'midi-text' }, '🎤'));
+    const iconBtn = (name, title, onclick) => h('button', { class: 'iconbtn', title, 'aria-label': title, onclick }, Icons.el(name));
+    const kbBtn = iconBtn('keyboard', t('On-screen keyboard'), () => { setPref('keyboard', !prefs.keyboard); kbBtn.classList.toggle('on', prefs.keyboard); });
+    kbBtn.classList.toggle('on', !!prefs.keyboard);
+    const statsBtn = iconBtn('stats', t('Weak spots'), () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)));
+    const setBtn = iconBtn('settings', t('Settings for this drill'), () => openSettings());
+    // inputs: MIDI (piano pages) and the microphone (guitar pages); a dot says whether they work
+    const midiBtn = iconBtn('midi', 'MIDI', () => self.Toolbox ? Toolbox.open('check') : null);
+    const micBtn = iconBtn('mic', t('Microphone'), () => self.Mic && (Mic.state === 'on' ? Mic.stop() : Mic.start()));
+    midiBtn.classList.add('status'); micBtn.classList.add('status');
     if (self.Mic) Mic.on('state', st => {
-      micBtn.dataset.state = st === 'on' ? 'ready' : st === 'denied' || st === 'unsupported' ? 'denied' : 'none';
-      micBtn.querySelector('.midi-text').textContent = '🎤 ' + ({ on: t('Listening'), asking: '…', denied: t('Microphone blocked'), unsupported: t('No microphone') }[st] || t('Microphone off'));
+      micBtn.dataset.state = st === 'on' ? 'ok' : st === 'denied' || st === 'unsupported' ? 'warn' : 'off';
+      micBtn.title = { on: t('Listening'), asking: '…', denied: t('Microphone blocked'), unsupported: t('No microphone') }[st] || t('Microphone off');
     });
     const bar = h('header', { class: 'bar' },
-      h('a', { class: 'home', href: '/', title: ED.name || t('Home') }, '‹'),
-      h('h1', {}, t(title)), opts.hud === false ? null : hud,
-      h('div', { class: 'tools' }, ...Object.entries({ mic: micBtn, midi: midiDot, sound: soundBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
-        .filter(([id]) => (opts.tools || ['midi', 'sound', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
+      h('a', { class: 'iconbtn back', href: '/', title: ED.name || t('Home'), 'aria-label': t('Home') }, Icons.el('back')),
+      h('h1', {}, t(title)), opts.hud === false ? h('div', { class: 'hud' }) : hud,
+      h('div', { class: 'tools' }, ...Object.entries({ mic: micBtn, midi: midiBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
+        .filter(([id]) => (opts.tools || ['midi', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
     const prompt = h('div', { class: 'prompt' });
     const card = h('div', { class: 'card' });
     const feedback = h('div', { class: 'feedback' });
@@ -193,24 +200,13 @@
     app.append(bar, h('main', { class: 'stage' }, prompt, card, feedback, answers), keys);
 
     Input.onStatus(({ state, devices }) => {
-      midiDot.dataset.state = state;
-      midiDot.title = state === 'ready' ? 'MIDI: ' + devices.join(', ')
+      midiBtn.dataset.state = state === 'ready' ? 'ok' : state === 'unsupported' || state === 'denied' ? 'warn' : 'off';
+      midiBtn.title = state === 'ready' ? 'MIDI: ' + devices.join(', ')
         : state === 'none' ? t('No MIDI keyboard connected')
         : state === 'unsupported' ? t('This browser has no Web MIDI (use Chrome or Edge)')
         : state === 'denied' ? t('MIDI access was refused') : 'MIDI';
-      midiDot.querySelector('.midi-text').textContent = state === 'ready' ? devices[0] : 'MIDI';
     });
     if ((opts.tools || ['midi']).includes('midi')) Input.init();
-    function showMidiHelp() {
-      const s = Input.state;
-      const msg = {
-        ready: t('Connected: {devices}. Play the answers on your keyboard.', { devices: Input.devices.join(', ') }),
-        none: t('No MIDI keyboard found. Connect your digital piano by USB (or Bluetooth MIDI) and switch it on; it shows up here by itself.'),
-        unsupported: t('This browser can\'t read MIDI keyboards. Use Chrome or Edge on a computer or Android tablet (Safari and iPad can\'t), over https. The on-screen keyboard and the answer buttons work everywhere.'),
-        denied: t('MIDI access was refused. Allow it in the browser\'s site settings (the icon left of the address) and reload.'),
-      }[s] || t('Looking for MIDI keyboards…');
-      alert(msg);
-    }
 
     const sess = { id: Date.now().toString(36), drill, start: Date.now(), n: 0, ok: 0, ms: 0, streak: 0, best: 0 };
     let askedAt = 0, current = null;
@@ -218,11 +214,12 @@
       const acc = sess.n ? Math.round(sess.ok / sess.n * 100) + ' %' : '–';
       const avg = sess.ok ? sec(sess.ms / sess.ok) : '–';
       hud.innerHTML = '';
+      const chip = (icon, text, title, cls = '') => h('span', { class: 'chip ' + cls, title }, Icons.el(icon, 17), h('b', {}, text));
       hud.append(
-        h('span', { title: t('Right / asked') }, h('b', {}, `${sess.ok}/${sess.n}`)),
-        h('span', { title: t('Accuracy this session') }, acc),
-        h('span', { title: t('Average time for a right answer') }, '⏱ ' + avg),
-        h('span', { title: t('Streak (best)') }, `🔥 ${sess.streak}` + (sess.best > sess.streak ? ` (${sess.best})` : '')));
+        chip('right', `${sess.ok}/${sess.n}`, t('Right / asked')),
+        chip('target', acc, t('Accuracy this session')),
+        chip('timer', avg, t('Average time for a right answer'), 'wide'),
+        chip('flame', String(sess.streak) + (sess.best > sess.streak ? ` (${sess.best})` : ''), t('Streak (best)'), sess.streak >= 5 ? 'hot' : ''));
     }
     drawHud();
     addEventListener('pagehide', () => saveSession(sess));
@@ -313,7 +310,15 @@
     for (const [k, v] of Object.entries(obj.data)) store.set(k, v);
   }
 
-  self.UI = { store, prefs, setPref, noteName, keyName, chordName, page, pick, stats, record, saveSession, summary, h, $, shuffle, rand, sec, exportData, importData };
+  // an icon and a label, for buttons: h('button', {}, UI.ilabel('play', t('Start'))) or btn.replaceChildren(UI.ilabel(…))
+  function ilabel(icon, text) {
+    const f = document.createDocumentFragment();
+    if (self.Icons) f.append(Icons.el(icon, 20));
+    f.append(document.createTextNode(text));
+    return f;
+  }
+
+  self.UI = { ilabel, store, prefs, setPref, noteName, keyName, chordName, page, pick, stats, record, saveSession, summary, h, $, shuffle, rand, sec, exportData, importData };
 })();
 
 // offline support (needs https or localhost)

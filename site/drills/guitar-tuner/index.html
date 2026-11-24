@@ -18,9 +18,11 @@
 <script src="/shared/theory.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Tuner: play one string at a time; the needle shows how many cents sharp or flat it is.
 // Choose a tuning, or tap a string to hear its reference tone.
@@ -40,7 +42,7 @@
   const strings = h('div', { class: 'tuner-strings' });
   const tuningSel = h('div', { class: 'seg' });
   const a4 = h('input', { type: 'number', min: 430, max: 450, step: 1, value: G().a4 || 440, class: 'text a4', onchange: e => setG('a4', Math.max(430, Math.min(450, +e.target.value || 440))) });
-  const startBtn = h('button', { class: 'btn primary big', onclick: () => Mic.start() }, '🎤 ' + t('Start listening'));
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => Mic.start() }, UI.ilabel('mic', t('Start listening')));
 
   stage.append(h('div', { class: 'card tuner' }, note, hz, needle, msg, startBtn, strings),
     h('div', { class: 'card tuner-settings' },

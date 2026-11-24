@@ -18,9 +18,11 @@
 <script src="/shared/theory.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Chords: see the name, play the chord (the microphone listens for its notes); name a chord box; or build the
 // shape on the fretboard with the mouse.
@@ -56,8 +58,8 @@
       page.el.prompt.innerHTML = `${t('Play')} <span class="symbol">${Guitar.chordName(c)}</span><small>${t('strum it once and let it ring')}</small>`;
       page.el.card.innerHTML = S.box === 'always' ? Guitar.diagram(c) : '';
       tools.append(
-        h('button', { class: 'btn', onclick: () => strumOf(c) }, '▶ ' + t('Listen')),
-        h('button', { class: 'btn ghost', onclick: () => { if (!wait) { wait = true; page.flash(true, t('OK: next one.')); setTimeout(next, 500); } } }, '✓ ' + t('I played it')),
+        h('button', { class: 'btn', onclick: () => strumOf(c) }, UI.ilabel('play', t('Listen'))),
+        h('button', { class: 'btn ghost', onclick: () => { if (!wait) { wait = true; page.flash(true, t('OK: next one.')); setTimeout(next, 500); } } }, UI.ilabel('check', t('I played it'))),
         h('button', { class: 'btn ghost', onclick: () => next() }, t('Skip') + ' ›'));
       if (Mic.state !== 'on') page.flash(null, t('Turn on the microphone (top right) so I can hear the chord, or use “I played it”.'));
     } else if (S.mode === 'name') {

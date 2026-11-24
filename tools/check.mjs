@@ -253,6 +253,7 @@ for (const p of ctx.self.PIECES) {
   for (const sc of Object.values(T.SCALES)) keys.set(sc.name, 'theory.js scales');
   for (const pr of T.PROGRESSIONS) keys.set(pr.name, 'theory.js progressions');
   for (const k of ['treble', 'bass', '1st inversion', '2nd inversion', '3rd inversion', 'Piano', 'Guitar']) keys.set(k, 'dynamic');
+  for (const [, n] of ctx.self.SECTIONS) keys.set(n, 'drills.js sections');
   const Gt = ctx.self.Guitar;
   for (const tu of Object.values(Gt.TUNINGS)) keys.set(tu.name, 'guitar.js tunings');
   for (const [, n] of Gt.GROUPS) keys.set(n, 'guitar.js chord groups');
@@ -266,6 +267,7 @@ for (const p of ctx.self.PIECES) {
     else passed++;
   }
   const unused = Object.keys(DE).filter(k => !keys.has(k));
+  if (process.env.LIST_UNUSED) console.log('UNUSED ' + JSON.stringify(unused));
   if (unused.length) console.warn(`! ${unused.length} German texts no page uses: ${unused.slice(0, 8).map(k => JSON.stringify(k)).join(', ')}${unused.length > 8 ? ' …' : ''}`);
   // every piece and drill has its German texts
   for (const p of ctx.self.PIECES) if (!p.de || !p.de.title || !p.de.about || !p.de.by) { failed++; console.error(`✗ piece ${p.id}: no German title/by/about`); }

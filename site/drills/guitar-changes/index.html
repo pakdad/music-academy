@@ -18,10 +18,12 @@
 <script src="/shared/theory.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Chord changes: switch between chords in time. With the metronome: strum once at the start of each bar while the
 // boxes show this chord and the next; each bar is checked by ear. One-minute changes: two chords, sixty seconds,
@@ -39,7 +41,7 @@
   const progLabel = p => p.map(id => Guitar.chordName(Guitar.chordById(id))).join(' – ');
   const tempo = h('input', { type: 'range', min: 30, max: 140, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
   const tempoOut = h('span', { class: 'num' }, `♩ = ${st.bpm}`);
-  const startBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go() }, '▶ ' + t('Start'));
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go() }, UI.ilabel('play', t('Start')));
   const status = h('div', { class: 'pstatus' });
   const boxes = h('div', { class: 'changes' });
   const bars = h('div', { class: 'barlog' });
@@ -74,7 +76,7 @@
   function go() {
     Sound.unlock();
     Mic.start();
-    startBtn.textContent = '■ ' + t('Stop');
+    startBtn.replaceChildren(UI.ilabel('stop', t('Stop')));
     bars.innerHTML = '';
     count.textContent = '';
     if (st.mode === 'minute') return goMinute();
@@ -148,7 +150,7 @@
     run.tr && run.tr.stop();
     cancelAnimationFrame(run.raf);
     run = null;
-    startBtn.textContent = '▶ ' + t('Start');
+    startBtn.replaceChildren(UI.ilabel('play', t('Start')));
   }
   Mic.on('onset', o => { if (run && run.minute) run.strum(performance.now()); });
   addEventListener('keydown', e => {

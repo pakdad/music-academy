@@ -21,11 +21,13 @@
 <script src="/shared/score.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/guitar.js"></script>
 <script src="/shared/mic.js"></script>
 <script src="/shared/gplayer.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Tab reading: short melodies in tab (with the notation above, if you like), new every time. Play them note by note
 // (the page waits), along with the metronome, or listen first. Input: the microphone, or clicks on the fretboard.
@@ -49,7 +51,7 @@
   const status = h('div', { class: 'pstatus' });
   const result = h('div', { class: 'presult' });
   const board = h('div', { class: 'board' });
-  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, '▶ ' + t('Start'));
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, UI.ilabel('play', t('Start')));
   const tempoOut = h('span', { class: 'num' });
   const seg = (options, get, set) => { const el = h('div', { class: 'seg' }); const draw = () => { el.innerHTML = ''; for (const [v, l] of options) el.append(h('button', { class: v === get() ? 'on' : '', onclick: () => { set(v); save(); draw(); } }, l)); }; draw(); return el; };
   const tempo = h('input', { type: 'range', min: 40, max: 160, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
@@ -61,7 +63,7 @@
   page.el.card.classList.add('score-card');
   page.el.card.after(board);
   board.after(result);
-  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.textContent = '▶ ' + t('Start'); } });
+  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.replaceChildren(UI.ilabel('play', t('Start'))); } });
 
   function phrase(S) {
     const sc = SCALES[S.scale];
@@ -103,11 +105,11 @@
     Guitar.fretboard(board, { frets: Math.max(5, S.frets), onPick });
   }
   function go() {
-    startBtn.textContent = '■ ' + t('Stop');
+    startBtn.replaceChildren(UI.ilabel('stop', t('Stop')));
     if (st.mode !== 'listen') Mic.start();
     player.start(st.mode, { bpm: st.bpm, metronome: st.metronome });
   }
-  function stopIt() { player.stop(); startBtn.textContent = '▶ ' + t('Start'); }
+  function stopIt() { player.stop(); startBtn.replaceChildren(UI.ilabel('play', t('Start'))); }
   function feedback(r, m) {
     if (r === 'bad') page.flash(false, t('Not that one: you played {note}.', { note: UI.noteName(T.spell(m, 0), { octave: true }) }));
     else page.clearFlash();

@@ -36,6 +36,7 @@
         nextStep = 0;
         pump();
         timer = setInterval(pump, 25);
+        if (self.document) document.dispatchEvent(new CustomEvent('transport-start', { detail: tr })); // the toolbox metronome steps aside
         return tr;
       },
       stop() { clearInterval(timer); timer = null; queue.length = 0; },

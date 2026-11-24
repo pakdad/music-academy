@@ -23,9 +23,11 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/keyboard.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/importer.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Pieces: real music with rhythm. Three ways to play one:
 //   Wait for me   the score waits until you play the right notes (learn the notes first)
@@ -69,7 +71,7 @@
     stage.append(h('div', { class: 'lib-grid' },
       mine().map(p => card(p, b)),
       h('button', { class: 'pcard import', onclick: () => fileIn.click() },
-        h('div', { class: 'pcard-title' }, '＋ ' + t('Import a piece')),
+        h('div', { class: 'pcard-title' }, UI.ilabel('plus', t('Import a piece'))),
         h('p', {}, t('From IMSLP: open the work\'s page, download its MIDI file (or a MusicXML file, e.g. from MuseScore), then load it here. You can then play it like any piece here.')),
         h('p', { class: 'muted' }, t('PDF scores are pictures of the music and can\'t be read as notes.'))),
       fileIn));
@@ -168,7 +170,7 @@
     els.status = h('div', { class: 'pstatus' });
     els.score = h('div', { class: 'card score-card' });
     els.result = h('div', { class: 'presult' });
-    els.start = h('button', { class: 'btn primary big', onclick: () => run ? stop(true) : start() }, '▶ ' + t('Start'));
+    els.start = h('button', { class: 'btn primary big', onclick: () => run ? stop(true) : start() }, UI.ilabel('play', t('Start')));
     els.tempoOut = h('span', { class: 'num' });
     const tempo = h('input', { type: 'range', min: 30, max: 200, value: PS.bpm, oninput: e => { PS.bpm = +e.target.value; tempoLabel(); savePiece(); } });
     const tempoLabel = () => { els.tempoOut.textContent = `♩ = ${PS.bpm}` + (PS.bpm !== P.tempo ? ` (${Math.round(PS.bpm / P.tempo * 100)} %)` : ''); };
@@ -249,7 +251,7 @@
     render();
     els.result.innerHTML = '';
     page.kb.clear();
-    els.start.textContent = '■ ' + t('Stop');
+    els.start.replaceChildren(UI.ilabel('stop', t('Stop')));
     if (settings.mode === 'wait') startWait();
     else startTimed(settings.mode === 'listen');
   }
@@ -259,7 +261,7 @@
     cancelAnimationFrame(run.raf);
     const r = run;
     run = null;
-    if (els.start) els.start.textContent = '▶ ' + t('Start');
+    if (els.start) els.start.replaceChildren(UI.ilabel('play', t('Start')));
     if (els.ph) els.ph.classList.remove('on');
     if (byUser && r.mode !== 'listen') els.result.innerHTML = `<p class="muted">${t('Stopped. Start again when you are ready.')}</p>`;
   }
@@ -424,7 +426,7 @@
       h('div', { class: 'big-score' }, score + ' %'),
       h('ul', {}, lines.map(l => h('li', {}, l))),
       h('p', { class: 'advice' }, advice),
-      h('button', { class: 'btn primary', onclick: () => start() }, '↻ ' + t('Again')));
+      h('button', { class: 'btn primary', onclick: () => start() }, UI.ilabel('again', t('Again'))));
   }
   function wrongNotes(n) { return n === 1 ? t('1 wrong note') : t('{n} wrong notes', { n }); }
   function saveBest(kind, score) {

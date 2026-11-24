@@ -13,9 +13,13 @@
   const nav = (self.navigator && navigator.language) || 'en';
   const lang = prefs.lang === 'de' || prefs.lang === 'en' ? prefs.lang : /^de\b/i.test(nav) ? 'de' : 'en';
   const theme = prefs.theme === 'mono' ? 'mono' : 'color';
+  // light or dark: the browser's choice unless the player picked one (prefs.mode 'light' | 'dark')
+  const mode = prefs.mode === 'light' || prefs.mode === 'dark' ? prefs.mode : 'auto';
+  const browserLang = /^de\b/i.test(nav) ? 'de' : 'en';
   if (self.document) {
     document.documentElement.lang = lang;
     document.documentElement.dataset.theme = theme;
+    if (mode !== 'auto') document.documentElement.dataset.mode = mode;
   }
 
   function t(s, params) {
@@ -41,5 +45,5 @@
 
   self.t = t;
   self.tr = tr;
-  self.I18N = { lang, theme, t, tr, translateDom };
+  self.I18N = { lang, theme, mode, browserLang, t, tr, translateDom };
 })();

@@ -21,8 +21,10 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/keyboard.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/chordinput.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Progressions: the first look at a new piece. Read the key from the signature and the chords, then
 // name each bar's harmony as a Roman numeral. Or hear a progression and recognise it, or play one
@@ -182,7 +184,7 @@
     page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${t(q.prog.name)}</small>`;
     page.flash(true, '');
     const row = UI.h('div', { class: 'row' },
-      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ ' + t('Listen')),
+      UI.h('button', { class: 'btn', onclick: () => listen() }, UI.ilabel('play', t('Listen'))),
       UI.h('button', { class: 'btn primary', onclick: () => next() }, t('Next') + ' ›'));
     page.el.answers.append(row);
     listen();
@@ -202,7 +204,7 @@
   function askHear(pool) {
     page.el.card.innerHTML = '';
     page.el.prompt.innerHTML = t('Which progression is this?') + '<small>' + t('Hear where it rests and where it pulls') + '</small>';
-    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, UI.h('button', { class: 'btn', onclick: () => listen(false) }, '▶ ' + t('Play again'))));
+    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, UI.h('button', { class: 'btn', onclick: () => listen(false) }, UI.ilabel('play', t('Play again')))));
     const others = UI.shuffle(pool.filter(p => p.id !== q.prog.id)).slice(0, 3);
     const opts = UI.shuffle([q.prog, ...others]).map(p => ({ label: p.chords.join(' – '), sub: t(p.name), value: p.id }));
     page.ask(q.item);
@@ -258,7 +260,7 @@
     page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${t(q.prog.name)}</small>`;
     page.flash(true, t('Done. Here it is written out.'));
     page.el.answers.append(UI.h('div', { class: 'row' },
-      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ ' + t('Listen')),
+      UI.h('button', { class: 'btn', onclick: () => listen() }, UI.ilabel('play', t('Listen'))),
       UI.h('button', { class: 'btn primary', onclick: () => next() }, t('Next') + ' ›')));
   }
 

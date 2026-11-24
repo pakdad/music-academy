@@ -19,9 +19,11 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/keyboard.js"></script>
+<script src="/shared/icons.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
 <script src="/shared/mic.js"></script>
+<script src="/shared/toolbox.js"></script>
 <script>
 // Metronome and timing: a metronome, plus a check of how close to the beat you play (any key, MIDI or
 // on-screen, or tap). Silent bars train the pulse inside you; calibration measures this setup's delay.
@@ -41,7 +43,7 @@
   const bpmOut = h('div', { class: 'bpm' });
   const slider = h('input', { type: 'range', min: 30, max: 240, value: S.bpm, oninput: e => setBpm(+e.target.value) });
   const dots = h('div', { class: 'beats' });
-  const startBtn = h('button', { class: 'btn primary big', onclick: () => run ? stopRun() : startRun() }, '▶ ' + t('Start'));
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => run ? stopRun() : startRun() }, UI.ilabel('play', t('Start')));
   const gapLabel = h('div', { class: 'gap-label' });
   const seg = (options, get, set) => {
     const el = h('div', { class: 'seg' });
@@ -134,7 +136,7 @@
     dots.innerHTML = '';
     for (let i = 0; i < beats; i++) dots.append(h('span', { class: i === 0 && S.accent ? 'first' : '' }));
     tr.start();
-    startBtn.textContent = '■ ' + t('Stop');
+    startBtn.replaceChildren(UI.ilabel('stop', t('Stop')));
     const loop = () => {
       if (!run) return;
       const b = tr.beatNow();
@@ -152,7 +154,7 @@
     run.tr.stop();
     cancelAnimationFrame(run.raf);
     run = null;
-    startBtn.textContent = '▶ ' + t('Start');
+    startBtn.replaceChildren(UI.ilabel('play', t('Start')));
     gapLabel.textContent = '';
     dots.classList.remove('silent');
     [...dots.children].forEach(d => d.classList.remove('on'));
