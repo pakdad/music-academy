@@ -1,0 +1,7 @@
+*
+!site
+!editions
+!tools/build.mjs
+!tools/check.mjs
+!nginx.conf
+**/.DS_Store

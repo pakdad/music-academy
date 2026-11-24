@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Key signatures</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script>
+// Key signatures: see a signature and name the key (or play its tonic), or see a key and pick its signature.
+// The first thing to read in a new score.
+(() => {
+  const T = Theory;
+  const SPEC = [
+    { id: 'dir', label: 'Direction', type: 'choice', options: [['read', 'Signature → key'], ['write', 'Key → signature'], ['both', 'Both']] },
+    { id: 'mode', label: 'Keys', type: 'choice', options: [['major', 'Major'], ['minor', 'Minor'], ['both', 'Major and minor']] },
+    { id: 'maxKey', label: 'Signatures', type: 'number', min: 1, max: 7, format: v => `up to ${v} ♯ or ♭` },
+    { id: 'clef', label: 'Clef', type: 'choice', options: [['treble', 'Treble'], ['bass', 'Bass'], ['grand', 'Grand staff'], ['mix', 'Mixed']] },
+  ];
+  const DEFAULTS = { dir: 'read', mode: 'major', maxKey: 7, clef: 'treble' };
+
+  const page = UI.page({
+    drill: 'key-signatures', title: 'Key signatures', settings: SPEC, defaults: DEFAULTS,
+    describe: item => { const [dir, f, m] = item.split(':'); return `${UI.keyName({ fifths: +f, minor: m === 'm' })} (${dir === 'read' ? 'reading' : 'writing'})`; },
+    onSettings: () => start(), keyboard: { lo: 48, hi: 72 },
+  });
+
+  const sigName = f => f === 0 ? 'none' : `${Math.abs(f)} ${f > 0 ? '♯' : '♭'}`;
+  let S, q = null, wait = false;
+
+  function start() { S = page.settings; next(); }
+
+  function items() {
+    const out = [];
+    const dirs = S.dir === 'both' ? ['read', 'write'] : [S.dir];
+    const modes = S.mode === 'both' ? ['M', 'm'] : [S.mode === 'minor' ? 'm' : 'M'];
+    for (const d of dirs) for (const m of modes) for (let f = -S.maxKey; f <= S.maxKey; f++) out.push(`${d}:${f}:${m}`);
+    return out;
+  }
+
+  function next() {
+    const item = page.pick(items(), { target: 2500, avoid: q ? [q.item] : [] });
+    const [dir, f, m] = item.split(':');
+    const key = { fifths: +f, minor: m === 'm' };
+    const clef = S.clef === 'mix' ? UI.rand(['treble', 'bass']) : S.clef;
+    q = { item, dir, key, clef, missed: false };
+    page.clearFlash();
+    page.kb.clear();
+    if (dir === 'read') {
+      page.el.prompt.innerHTML = `Which <b>${key.minor ? 'minor' : 'major'}</b> key?<small>Tap it, or play its tonic</small>`;
+      page.el.card.innerHTML = Staff.svg({ clef, key: key.fifths, items: [], minWidth: 18, ledgers: 1 });
+      const opts = [];
+      for (let g = -S.maxKey; g <= S.maxKey; g++) opts.push({ label: UI.keyName({ fifths: g, minor: key.minor }).replace(/ (major|minor)$/, '').replace(/-(Dur|Moll)$/, ''), value: g }); // no signature count on the buttons: that would let you match by counting
+      page.choices(opts, (g, btn) => check(g === key.fifths, btn, `It's <b>${UI.keyName(key)}</b> (${sigName(key.fifths)}). ${tip(key)}`), { columns: Math.min(8, opts.length) });
+    } else {
+      page.el.prompt.innerHTML = `What's the signature of <b>${UI.keyName(key)}</b>?`;
+      page.el.card.innerHTML = '';
+      const opts = [];
+      for (let g = -7; g <= 7; g++) if (Math.abs(g) <= S.maxKey) opts.push({ label: sigName(g), value: g });
+      page.choices(opts, (g, btn) => check(g === key.fifths, btn, `${UI.keyName(key)} has <b>${sigName(key.fifths)}</b>. ${tip(key)}`), { columns: Math.min(8, opts.length) });
+    }
+    page.ask(item);
+    wait = false;
+  }
+
+  // the rules of thumb, for after a miss
+  function tip(key) {
+    const t = T.keyTonic(key.fifths, false);
+    const n = x => UI.noteName(x);
+    if (key.fifths === 0) return key.minor ? 'No sharps or flats: C major, and its relative minor is A minor.' : 'No sharps or flats.';
+    const rel = key.minor ? ` The relative major is ${UI.keyName({ fifths: key.fifths, minor: false })}: a minor third above.` : '';
+    if (key.fifths > 0) {
+      const last = T.keySignature(key.fifths).pop();
+      return `With sharps, the major key is a half step above the last sharp (${n({ ...last, octave: 4 })} → ${n(t)}).${rel}`;
+    }
+    if (key.fifths === -1) return `One flat (B♭) is F major.${rel}`;
+    const sig = T.keySignature(key.fifths);
+    return `With flats, the second-to-last flat names the major key (${n({ ...sig[sig.length - 2], octave: 4 })}).${rel}`;
+  }
+
+  function check(ok, btn, wrongText) {
+    if (!q || wait) return;
+    if (ok) {
+      if (!q.missed) page.answer(true);
+      btn && btn.classList.add('right');
+      wait = true;
+      if (q.dir === 'write') page.el.card.innerHTML = Staff.svg({ clef: q.clef, key: q.key.fifths, items: [], minWidth: 18, ledgers: 1 });
+      page.flash(true, q.dir === 'read' ? UI.keyName(q.key) : '');
+      setTimeout(next, q.dir === 'write' ? 900 : 450);
+    } else {
+      if (!q.missed) page.answer(false);
+      q.missed = true;
+      btn && btn.classList.add('wrong');
+      page.flash(false, wrongText);
+    }
+  }
+
+  // playing the tonic, any octave
+  Input.on(e => {
+    if (e.type !== 'on' || !q || wait || q.dir !== 'read') return;
+    const tonic = T.keyTonic(q.key.fifths, q.key.minor);
+    if (T.mod(e.midi, 12) === T.pc(tonic)) return check(true);
+    page.kb.mark(e.midi, 'bad');
+    check(false, null, `${UI.noteName(T.spell(e.midi, q.key.fifths))} isn't it: this is <b>${UI.keyName(q.key)}</b>. ${tip(q.key)}`);
+  });
+
+  self.__state = () => q; // for the end-to-end test
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Note reading</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script>
+// Note reading: see a note (or a row of notes), play the exact key or name it. Fast.
+// Questions are items like "treble:F#5"; the weak and slow ones come back more often.
+(() => {
+  const T = Theory;
+  const GOOD = '#16a34a', BAD = '#dc2626';
+
+  const SPEC = [
+    { id: 'clef', label: 'Clef', type: 'choice', options: [['treble', 'Treble (G clef)'], ['bass', 'Bass (F clef)'], ['grand', 'Both (grand staff)']] },
+    { id: 'ledgers', label: 'Ledger lines', type: 'number', min: 0, max: 4, format: v => v ? `up to ${v} above and below` : 'none: only on the staff' },
+    { id: 'acc', label: 'Sharps and flats', type: 'choice', options: [['none', 'None'], ['some', 'Some ♯ and ♭'], ['key', 'From a key signature']],
+      hint: 'With a key signature, the notes follow it: read the signature, then the note.' },
+    { id: 'maxKey', label: 'Key signatures', type: 'number', min: 1, max: 7, format: v => `up to ${v} ♯ or ♭`, show: s => s.acc === 'key' },
+    { id: 'answer', label: 'Answer by', type: 'choice', options: [['keys', 'Playing the key'], ['names', 'Naming the note']],
+      hint: 'Playing (MIDI or on-screen) must be the exact key, in the right octave. Naming asks for the name only; on a computer type it: C … B, Shift = ♯, Alt = ♭.' },
+    { id: 'count', label: 'Notes per card', type: 'choice', options: [[1, '1'], [4, '4'], [8, '8']], hint: 'More notes: read ahead and play them left to right.' },
+  ];
+  const DEFAULTS = { clef: 'treble', ledgers: 2, acc: 'none', maxKey: 4, answer: 'keys', count: 1 };
+
+  const page = UI.page({
+    drill: 'note-reading', title: 'Note reading', settings: SPEC, defaults: DEFAULTS,
+    describe: item => { const [staff, nm] = item.split(':'); return `${UI.noteName(T.parse(nm), { octave: true })} · ${staff}`; },
+    onSettings: () => start(), onKey, keyboard: { lo: 48, hi: 84 },
+  });
+
+  // every question the settings allow, for one staff
+  function pool(staff, S, key) {
+    const [lo, hi] = Staff.range(staff, S.ledgers);
+    const out = [];
+    for (let d = lo; d <= hi; d++) {
+      const base = T.fromDia(d);
+      let alters = [0];
+      // E♯, B♯, C♭ and F♭ only come from key signatures
+      if (S.acc === 'some') alters = [0, 1, -1].filter(a => !(a === 1 && (base.step === 2 || base.step === 6)) && !(a === -1 && (base.step === 0 || base.step === 3)));
+      if (S.acc === 'key') alters = [T.keyAlter(key, base.step)];
+      for (const a of alters) out.push(`${staff}:${T.name({ ...base, alter: a }, { octave: true, ascii: true })}`);
+    }
+    return out;
+  }
+
+  let S, card = null, wait = false;
+
+  function start() {
+    S = page.settings;
+    // the on-screen keyboard covers everything this setting can ask
+    const all = (S.clef === 'grand' ? ['treble', 'bass'] : [S.clef]).flatMap(st => pool(st, { ...S, acc: 'none' }, 0));
+    const ms = all.map(i => T.midi(T.parse(i.split(':')[1])));
+    page.kb.setRange(Math.min(...ms) - 1, Math.max(...ms) + 1);
+    if (S.answer === 'names') nameButtons(); else page.clearChoices();
+    next();
+  }
+
+  function next() {
+    const staves = S.clef === 'grand' ? ['treble', 'bass'] : [S.clef];
+    const fifths = S.acc === 'key' ? UI.rand([...Array(S.maxKey * 2 + 1).keys()].map(i => i - S.maxKey).filter(f => f)) : 0;
+    const items = staves.flatMap(st => pool(st, S, fifths));
+    const picked = [];
+    for (let i = 0; i < S.count; i++) picked.push(page.pick(items, { target: 1500, avoid: picked.slice(-2) }));
+    card = {
+      key: fifths, i: 0,
+      notes: picked.map(item => { const [staff, nm] = item.split(':'); return { item, n: { ...T.parse(nm), staff }, missed: false, done: false }; }),
+    };
+    page.el.prompt.innerHTML = S.answer === 'names'
+      ? (S.count > 1 ? 'Name these notes, left to right' : 'Name this note')
+      : (S.count > 1 ? 'Play these notes, left to right' : 'Play this note');
+    page.clearFlash();
+    page.kb.clear();
+    draw();
+    page.ask(card.notes[0].item);
+    wait = false;
+  }
+
+  function draw() {
+    const many = card.notes.length > 1;
+    const items = card.notes.map((x, i) => ({
+      notes: [x.n],
+      color: x.done ? GOOD : (x.wrong && i === card.i ? BAD : undefined),
+      mark: many && i === card.i,
+    }));
+    page.el.card.innerHTML = Staff.svg({
+      clef: S.clef, key: card.key, items, ledgers: Math.max(2, S.ledgers),
+      minWidth: many ? 0 : 22, spacing: card.notes.length > 4 ? 5.4 : 7, barlines: false,
+    });
+  }
+
+  function answer(ok, wrongText) {
+    if (!card || wait) return;
+    const cur = card.notes[card.i];
+    if (!ok) {
+      if (!cur.missed) page.answer(false, { item: cur.item });
+      cur.missed = true; cur.wrong = true;
+      page.flash(false, wrongText);
+      page.kb.mark(T.midi(cur.n), 'hint');
+      draw();
+      return;
+    }
+    if (!cur.missed) page.answer(true, { item: cur.item });
+    cur.done = true; cur.wrong = false;
+    page.clearFlash();
+    page.kb.clear();
+    card.i++;
+    draw();
+    if (card.i < card.notes.length) { page.ask(card.notes[card.i].item); return; }
+    wait = true;
+    setTimeout(next, card.notes.length > 1 ? 450 : 220);
+  }
+
+  Input.on(e => {
+    if (e.type !== 'on' || !card || wait) return;
+    const cur = card.notes[card.i];
+    const target = T.midi(cur.n);
+    if (e.midi === target) return answer(true);
+    page.kb.mark(e.midi, 'bad');
+    const played = T.spell(e.midi, card.key);
+    const sameName = T.pc(played) === T.pc(cur.n);
+    answer(false, sameName
+      ? `Right note, wrong octave: you played ${UI.noteName(played, { octave: true })}, this is ${UI.noteName(cur.n, { octave: true })}`
+      : `You played ${UI.noteName(played, { octave: true })}. This is <b>${UI.noteName(cur.n, { octave: true })}</b>`);
+  });
+
+  function named(step, alter) {
+    if (!card || wait) return;
+    const cur = card.notes[card.i];
+    if (cur.n.step === step && cur.n.alter === alter) return answer(true);
+    answer(false, `Not ${UI.noteName({ step, alter, octave: 4 })}. This is <b>${UI.noteName(cur.n, { octave: true })}</b>`);
+  }
+
+  function nameButtons() {
+    const rows = S.acc === 'none' ? [0] : [-1, 0, 1];
+    const opts = [];
+    for (const alter of rows) for (let step = 0; step < 7; step++) opts.push({ label: UI.noteName({ step, alter, octave: 4 }), value: [step, alter] });
+    page.choices(opts, ([step, alter]) => named(step, alter), { columns: 7 });
+  }
+
+  // typing: letter = natural, Shift = sharp, Alt = flat; in German, H is B and B is B♭
+  function onKey(e) {
+    if (!S || S.answer !== 'names' || !/^Key[A-H]$/.test(e.code)) return;
+    const letter = e.code.slice(3);
+    let step = 'CDEFGAB'.indexOf(letter), alter = e.shiftKey ? 1 : e.altKey ? -1 : 0;
+    if (letter === 'H') { if (UI.prefs.names !== 'de') return; step = 6; }
+    else if (letter === 'B' && UI.prefs.names === 'de') { step = 6; alter = -1; }
+    if (step < 0) return;
+    e.preventDefault();
+    named(step, alter);
+  }
+
+  self.__state = () => card; // for the end-to-end test
+  start();
+})();
+</script>
+</body>
+</html>

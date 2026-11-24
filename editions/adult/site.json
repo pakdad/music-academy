@@ -1,0 +1,7 @@
+{
+  "name": "Music Academy",
+  "slug": "music-academy",
+  "audience": "adult",
+  "instruments": ["piano"],
+  "description": "Music theory practice: note reading, key signatures, chords, scales and progressions."
+}

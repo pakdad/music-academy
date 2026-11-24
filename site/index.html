@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<meta name="description" content="Music theory practice: note reading, key signatures, chords, scales and progressions, with a MIDI keyboard or on screen.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Music Academy</title>
+<style>
+  body { overflow-y: auto; }
+  .home-wrap { max-width: 1040px; margin: 0 auto; padding: 28px 18px 40px; width: 100%; }
+  .hero { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .hero img { width: 54px; height: 54px; border-radius: 13px; }
+  .hero h1 { margin: 0; font-size: 28px; }
+  .hero p { margin: 0; color: var(--muted); }
+  .hero .midi { margin-left: auto; }
+  .tabs { display: flex; gap: 6px; margin: 26px 0 14px; }
+  .tab { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 16px; font-weight: 600; cursor: pointer; }
+  .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .tab[disabled] { opacity: .5; cursor: default; }
+  .today { color: var(--muted); margin: 0 0 14px; }
+  .today b { color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+  .drill { display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); text-decoration: none; color: inherit; border: 1px solid transparent; transition: border-color .15s, transform .1s; }
+  .drill:hover { border-color: var(--accent); }
+  .drill:active { transform: translateY(1px); }
+  .drill .top { display: flex; align-items: center; gap: 12px; }
+  .drill .ic { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font: 600 19px Georgia, serif; flex: none; white-space: nowrap; letter-spacing: -.5px; }
+  .drill h2 { margin: 0; font-size: 18px; }
+  .drill p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .drill .st { margin-top: auto; padding-top: 8px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .drill .st b { color: var(--ink); }
+  section.prefs { margin-top: 34px; padding: 18px; border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); display: grid; gap: 16px; }
+  section.prefs h2 { margin: 0; font-size: 17px; }
+  .pref { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .pref > span { min-width: 140px; font-weight: 600; font-size: 15px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="home-wrap">
+  <header class="hero">
+    <img src="/icon.svg" alt="">
+    <div>
+      <h1 id="name">Music Academy</h1>
+      <p>Read faster, find the key, know the chords: music theory at the keyboard.</p>
+    </div>
+    <button class="midi" id="midi"><span class="dot"></span><span class="midi-text">MIDI</span></button>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+  <p class="today" id="today"></p>
+  <div class="grid" id="drills"></div>
+
+  <section class="prefs">
+    <h2>Settings</h2>
+    <div class="pref"><span>Note names</span><div class="seg" id="names"></div></div>
+    <div class="pref"><span>Sound</span><div class="seg" id="sound"></div></div>
+    <div class="pref"><span>Your progress</span>
+      <button class="btn" id="export">Save to a file</button>
+      <button class="btn ghost" id="import">Load from a file</button>
+      <input type="file" id="file" accept="application/json" hidden>
+    </div>
+    <p class="hint" style="margin:0">Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.</p>
+  </section>
+
+  <footer>
+    Works best with a digital piano connected by USB or Bluetooth MIDI, in Chrome or Edge. Without one, use the on-screen keyboard or the answer buttons.
+    Install it as an app from the browser's menu; it then works offline.<br>
+    Music font: <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
+  </footer>
+</div>
+
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/drills.js"></script>
+<script src="/shared/ui.js"></script>
+<script>
+(() => {
+  const { h, $ } = UI;
+  const ED = self.EDITION;
+  $('#name').textContent = ED.name;
+  document.title = ED.name;
+
+  // instruments: only those this edition has are live; guitar is coming
+  const INSTRUMENTS = [['piano', 'Piano'], ['guitar', 'Guitar']];
+  let instrument = UI.store.get('instrument', ED.instruments[0]);
+  if (!ED.instruments.includes(instrument)) instrument = ED.instruments[0];
+  function tabs() {
+    const el = $('#tabs');
+    el.innerHTML = '';
+    for (const [id, label] of INSTRUMENTS) {
+      const live = ED.instruments.includes(id);
+      el.append(h('button', { class: 'tab' + (id === instrument ? ' on' : ''), disabled: !live, title: live ? '' : 'Coming later',
+        onclick: () => { instrument = id; UI.store.set('instrument', id); tabs(); drills(); } }, label + (live ? '' : ' · soon')));
+    }
+  }
+
+  function drills() {
+    const el = $('#drills');
+    el.innerHTML = '';
+    let today = 0;
+    for (const d of DRILLS.filter(d => d.instrument === instrument && d.audience.includes(ED.audience))) {
+      const s = UI.summary(d.id);
+      today += s.today;
+      const st = s.today
+        ? h('div', { class: 'st', html: `Today <b>${s.today}</b> · ${Math.round(s.acc * 100)} % · ⏱ ${s.avg ? UI.sec(s.avg) : '–'} · ${s.total} in all` })
+        : h('div', { class: 'st' }, s.total ? `${s.total} answered · last ${new Date(s.last).toLocaleDateString()}` : 'Not started yet');
+      el.append(h('a', { class: 'drill', href: '/' + d.path },
+        h('div', { class: 'top' }, h('div', { class: 'ic' }, d.icon), h('h2', {}, d.name)),
+        h('p', {}, d.about), st));
+    }
+    // days in a row with some practice
+    const days = new Set(UI.store.get('sessions', []).map(s => new Date(s.start).toDateString()));
+    let streak = 0;
+    for (let t = new Date(); days.has(t.toDateString()); t.setDate(t.getDate() - 1)) streak++;
+    $('#today').innerHTML = today
+      ? `Today: <b>${today}</b> answers` + (streak > 1 ? ` · <b>${streak}</b> days in a row` : '')
+      : streak ? `Yesterday you practised: keep the streak going.` : 'Pick a drill. Ten focused minutes a day beats an hour a week.';
+  }
+
+  function seg(id, options, value, onPick) {
+    const el = $('#' + id);
+    el.innerHTML = '';
+    for (const [v, label] of options) el.append(h('button', { class: v === value ? 'on' : '', onclick: () => { onPick(v); seg(id, options, v, onPick); } }, label));
+  }
+  seg('names', [['en', 'English: C D E F G A B, B♭'], ['de', 'Deutsch: C D E F G A H, B']], UI.prefs.names, v => UI.setPref('names', v));
+  const soundVal = () => UI.prefs.sound ? (UI.prefs.feedback ? 'all' : 'music') : 'off';
+  seg('sound', [['all', 'Music and clicks'], ['music', 'Music only'], ['off', 'Off']], soundVal(), v => {
+    UI.setPref('sound', v !== 'off');
+    UI.setPref('feedback', v === 'all');
+  });
+
+  $('#export').onclick = () => {
+    const blob = new Blob([JSON.stringify(UI.exportData(), null, 1)], { type: 'application/json' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: `${ED.slug}-progress-${new Date().toISOString().slice(0, 10)}.json` });
+    document.body.append(a); a.click(); a.remove();
+  };
+  $('#import').onclick = () => $('#file').click();
+  $('#file').onchange = async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      UI.importData(JSON.parse(await f.text()));
+      alert('Progress loaded.');
+      location.reload();
+    } catch (err) { alert('That file could not be read: ' + err.message); }
+  };
+
+  const midi = $('#midi');
+  Input.onStatus(({ state, devices }) => {
+    midi.dataset.state = state;
+    midi.querySelector('.midi-text').textContent = state === 'ready' ? devices.join(', ')
+      : state === 'none' ? 'No MIDI keyboard' : state === 'unsupported' ? 'No MIDI in this browser' : state === 'denied' ? 'MIDI blocked' : 'MIDI';
+  });
+  midi.onclick = () => Input.init();
+  Input.init();
+
+  tabs();
+  drills();
+  addEventListener('pageshow', drills);
+})();
+</script>
+</body>
+</html>

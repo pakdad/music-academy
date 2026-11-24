@@ -1,0 +1,20 @@
+# How the homelab runs it (the pipeline's deploy job: docker compose -p music-academy -f deploy/docker-compose.yml up -d).
+# IMAGE_TAG and PORT come from the workflow.
+services:
+  web:
+    image: ghcr.io/pakdad/music-academy:${IMAGE_TAG:-latest}
+    container_name: music-academy
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8082}:80"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, NET_BIND_SERVICE]
+    mem_limit: 64m
+    cpus: 0.5

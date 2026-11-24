@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Scales</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script>
+// Scales: play one (from the notes or from memory), name one from the staff, or tell scales apart by ear.
+// Items: "<type>:<tonic>" (play, name) and "hear:<type>".
+(() => {
+  const T = Theory;
+  const GOOD = '#16a34a';
+  const TYPES = Object.entries(T.SCALES).map(([id, s]) => [id, s.name[0].toUpperCase() + s.name.slice(1)]);
+  const SPEC = [
+    { id: 'mode', label: 'Drill', type: 'choice', options: [['play', 'Play the scale'], ['name', 'See it, name it'], ['hear', 'Hear it, name its sound']] },
+    { id: 'types', label: 'Scales', type: 'multi', options: TYPES, hint: 'The modes (Dorian … Locrian) are what give music its colour: try them by ear.' },
+    { id: 'maxKey', label: 'Tonics', type: 'number', min: 0, max: 7, format: v => v ? `keys up to ${v} ♯ or ♭` : 'C only (and its modes)' },
+    { id: 'dir', label: 'Direction', type: 'choice', options: [['up', 'Up'], ['updown', 'Up and down']], show: s => s.mode === 'play' },
+    { id: 'octaves', label: 'Octaves', type: 'choice', options: [[1, '1'], [2, '2']], show: s => s.mode === 'play' },
+    { id: 'show', label: 'Read from', type: 'choice', options: [['name', 'The name only (from memory)'], ['notes', 'The notes on the staff']], show: s => s.mode === 'play' },
+    { id: 'clef', label: 'Clef', type: 'choice', options: [['treble', 'Treble'], ['bass', 'Bass']], show: s => s.mode !== 'hear' },
+  ];
+  const DEFAULTS = { mode: 'play', types: ['major'], maxKey: 4, dir: 'updown', octaves: 1, show: 'name', clef: 'treble' };
+
+  // English: "A harmonic minor"; German: "A-Dur", "a-Moll harmonisch", "D dorisch"
+  function scaleName(tonic, type) {
+    const n = UI.noteName(tonic);
+    if (UI.prefs.names !== 'de') return `${n} ${T.SCALES[type].name}`;
+    if (type === 'major') return `${n}-Dur`;
+    if (/Minor$/.test(type)) return `${n.toLowerCase()}-${T.SCALES[type].de}`;
+    return `${n} ${T.SCALES[type].de}`;
+  }
+
+  const page = UI.page({
+    drill: 'scales', title: 'Scales', settings: SPEC, defaults: DEFAULTS,
+    describe: item => { const [a, b] = item.split(':'); return a === 'hear' ? `${T.SCALES[b].name} (by ear)` : scaleName(T.parse(b), a); },
+    onSettings: () => start(), keyboard: { lo: 48, hi: 84 },
+  });
+
+  function tonics(type, max) {
+    const out = [];
+    for (let step = 0; step < 7; step++) for (const alter of [-1, 0, 1]) {
+      const t = T.note(step, alter, 4);
+      const f = T.scaleFifths(t, type);
+      if (f !== null && Math.abs(f) <= max) out.push(T.name(t, { ascii: true }));
+    }
+    return out;
+  }
+  // a comfortable octave for the clef
+  function placed(tonic, clef) {
+    if (clef === 'bass') return { ...tonic, octave: tonic.step <= 2 ? 3 : 2 };
+    return { ...tonic, octave: 4 };
+  }
+  function notesOf(tonic, type, octaves, dir) {
+    let up = T.scale(tonic, type);
+    if (octaves === 2) up = up.concat(T.scale(T.transpose(tonic, 7, 12), type).slice(1));
+    if (dir !== 'updown') return up;
+    // melodic minor comes down as natural minor
+    let down = up;
+    if (type === 'melodicMinor') {
+      down = T.scale(tonic, 'naturalMinor');
+      if (octaves === 2) down = down.concat(T.scale(T.transpose(tonic, 7, 12), 'naturalMinor').slice(1));
+    }
+    return up.concat([...down].reverse().slice(1));
+  }
+
+  let S, q = null, wait = false;
+
+  function start() {
+    S = page.settings;
+    page.clearChoices();
+    next();
+  }
+
+  function next() {
+    page.clearFlash();
+    page.kb.clear();
+    page.clearChoices();
+    wait = false;
+    if (S.mode === 'hear') return nextHear();
+    const items = S.types.flatMap(type => tonics(type, S.maxKey).map(t => `${type}:${t}`));
+    const item = page.pick(items, { target: S.mode === 'play' ? 6000 : 3000, avoid: q ? [q.item] : [] });
+    const [type, t] = item.split(':');
+    const tonic = placed(T.parse(t), S.clef);
+    if (S.mode === 'name') {
+      q = { item, type, tonic, notes: T.scale(tonic, type), missed: false };
+      page.el.prompt.innerHTML = 'Which scale is this?';
+      drawScale({ key: 0 });
+      nameChoices();
+    } else {
+      const notes = notesOf(tonic, type, S.octaves, S.dir);
+      q = { item, type, tonic, notes, i: 0, offset: null, missed: false, done: [] };
+      page.el.prompt.innerHTML = `Play <b>${scaleName(tonic, type)}</b><small>${S.octaves === 2 ? 'two octaves' : 'one octave'}, ${S.dir === 'updown' ? 'up and down' : 'up'}, starting on any ${UI.noteName(tonic)}</small>`;
+      if (S.show === 'notes') drawScale({ key: T.scaleFifths(tonic, type) });
+      else page.el.card.innerHTML = '';
+    }
+    page.ask(item);
+  }
+
+  function drawScale({ key = 0, colorUpTo = -1 }) {
+    const many = q.notes.length > 9;
+    page.el.card.innerHTML = Staff.svg({
+      clef: S.clef, key, ledgers: S.octaves === 2 ? 4 : 2, spacing: many ? 3.4 : 4.6, barlines: false,
+      items: q.notes.map((n, i) => ({ notes: [n], color: i <= colorUpTo ? GOOD : undefined, mark: S.mode === 'play' && i === colorUpTo + 1 && S.show === 'notes' })),
+    });
+  }
+
+  // ---------- name it ----------
+  function nameChoices() {
+    const right = scaleName(q.tonic, q.type);
+    const opts = new Map([[right, true]]);
+    const types = S.types.length > 2 ? S.types : Object.keys(T.SCALES);
+    const tries = types.filter(t => t !== q.type).map(t => scaleName(q.tonic, t));
+    for (const d of [-1, 1]) { const r = T.transpose(q.tonic, d, d * (d > 0 ? 2 : 1)); if (Math.abs(r.alter) <= 1) tries.push(scaleName(r, q.type)); }
+    for (const t of UI.shuffle(tries)) { if (opts.size >= 6) break; if (!opts.has(t)) opts.set(t, false); }
+    page.choices(UI.shuffle([...opts.entries()].map(([label, value]) => ({ label, value }))), (ok, btn) => {
+      if (wait) return;
+      if (ok) {
+        btn.classList.add('right');
+        if (!q.missed) page.answer(true);
+        wait = true;
+        Sound.sequence(q.notes.map(T.midi), { gap: 0.22, dur: 0.5 });
+        page.flash(true, right);
+        setTimeout(next, 1900);
+      } else {
+        btn.classList.add('wrong');
+        if (!q.missed) page.answer(false);
+        q.missed = true;
+        page.flash(false, `It's <b>${right}</b>. ${stepsText(q.notes)}`);
+      }
+    }, { columns: 3 });
+  }
+  // the whole/half step pattern, e.g. W W H W W W H
+  function stepsText(notes) {
+    const st = notes.slice(1).map((n, i) => T.midi(n) - T.midi(notes[i]));
+    return 'Steps: ' + st.map(s => s === 1 ? 'H' : s === 2 ? 'W' : s === 3 ? 'W+H' : s).join(' ');
+  }
+
+  // ---------- play it ----------
+  Input.on(e => {
+    if (e.type !== 'on' || !q || wait || S.mode !== 'play') return;
+    const n = q.notes[q.i];
+    if (q.offset === null) {
+      if (T.mod(e.midi - T.midi(n), 12) !== 0) { page.kb.mark(e.midi, 'bad'); return miss(`Start on ${UI.noteName(n)}`); }
+      q.offset = e.midi - T.midi(n);
+    } else if (e.midi !== T.midi(n) + q.offset) {
+      page.kb.mark(e.midi, 'bad');
+      page.kb.mark(T.midi(n) + q.offset, 'hint');
+      const played = T.spell(e.midi, T.scaleFifths(q.tonic, q.type) || 0);
+      return miss(`${UI.noteName(played)} — next is <b>${UI.noteName(n)}</b>`);
+    }
+    page.kb.clear();
+    page.clearFlash();
+    q.i++;
+    if (S.show === 'notes') drawScale({ key: T.scaleFifths(q.tonic, q.type), colorUpTo: q.i - 1 });
+    if (q.i < q.notes.length) return;
+    // finished
+    const ms = page.answer(!q.missed, { count: true });
+    wait = true;
+    if (S.show !== 'notes') drawScale({ key: T.scaleFifths(q.tonic, q.type), colorUpTo: q.notes.length - 1 });
+    page.flash(!q.missed, q.missed ? `Done, with a slip. ${(ms / 1000).toFixed(1)} s` : `Clean! ${(ms / 1000).toFixed(1)} s`);
+    setTimeout(next, 1800);
+  });
+  function miss(text) {
+    if (!q.missed) { q.missed = true; }
+    page.flash(false, text);
+  }
+
+  // ---------- hear it ----------
+  function nextHear() {
+    const types = S.types.length >= 2 ? S.types : ['major', 'naturalMinor', ...S.types.filter(t => t !== 'major' && t !== 'naturalMinor')];
+    const item = page.pick(types.map(t => 'hear:' + t), { target: 4000, avoid: q ? [q.item] : [] });
+    const type = item.split(':')[1];
+    const ts = tonics(type, Math.max(S.maxKey, 1));
+    const tonic = { ...T.parse(UI.rand(ts)), octave: 4 };
+    if (T.midi(tonic) > 66) tonic.octave = 3;
+    q = { item, type, tonic, notes: T.scale(tonic, type), missed: false };
+    page.el.prompt.innerHTML = 'Which scale is this?<small>Listen to its colour over the low tonic</small>';
+    page.el.card.innerHTML = '';
+    const replay = UI.h('button', { class: 'btn', onclick: () => playHear() }, '▶ Play again');
+    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, replay));
+    const right = T.SCALES[type].name;
+    page.choices(types.map(t => ({ label: T.SCALES[t].name[0].toUpperCase() + T.SCALES[t].name.slice(1), value: t })), (t, btn) => {
+      if (wait) return;
+      if (t === type) {
+        btn.classList.add('right');
+        if (!q.missed) page.answer(true);
+        wait = true;
+        page.flash(true, `${scaleName(tonic, type)} · ${stepsText(q.notes)}`);
+        drawScale({ key: 0 });
+        setTimeout(next, 2600);
+      } else {
+        btn.classList.add('wrong');
+        if (!q.missed) page.answer(false);
+        q.missed = true;
+        page.flash(false, `Not ${T.SCALES[t].name}. Listen again.`);
+      }
+    }, { columns: Math.min(5, types.length) });
+    page.ask(item);
+    setTimeout(playHear, 300);
+  }
+  function playHear() {
+    const ms = q.notes.map(T.midi);
+    const down = [...ms].reverse().slice(1);
+    const bass = T.midi(q.tonic) - 24;
+    Sound.note(bass, { dur: 7.5, vel: 0.5 });
+    [...ms, ...down].forEach((m, i) => Sound.note(m, { at: 0.4 + i * 0.32, dur: 0.45, vel: 0.6 }));
+    Sound.chord(T.chord({ ...q.tonic }, T.SCALES[q.type].steps[2] === 3 ? (T.SCALES[q.type].steps[4] === 6 ? 'dim' : 'min') : 'maj').map(T.midi), { at: 0.4 + (ms.length + down.length) * 0.32 + 0.1, dur: 1.6, vel: 0.5 });
+  }
+
+  self.__state = () => q; // for the end-to-end test
+  start();
+})();
+</script>
+</body>
+</html>

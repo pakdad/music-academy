@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Chords</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/chordinput.js"></script>
+<script>
+// Chords: name a chord from the staff, play it from the staff, or play it from its symbol.
+// Items are "<type>:<root>:<inversion>", e.g. "min7:F#:1".
+(() => {
+  const T = Theory;
+  const GOOD = '#16a34a';
+  const TYPE_LABEL = { maj: 'major', min: 'minor', dim: 'dim', aug: 'aug', dom7: '7', maj7: 'maj7', min7: 'm7', hdim7: 'ø7 (m7♭5)', dim7: '°7' };
+  const SPEC = [
+    { id: 'mode', label: 'Drill', type: 'choice', options: [['name', 'See it, name it'], ['play', 'See it, play it'], ['symbol', 'See the symbol, play it']] },
+    { id: 'types', label: 'Chords', type: 'multi', options: Object.entries(TYPE_LABEL) },
+    { id: 'inv', label: 'Inversions', type: 'choice', options: [['root', 'Root position'], ['all', 'All inversions']],
+      hint: 'With inversions, playing must have the written bass note at the bottom (C/E: E lowest).' },
+    { id: 'maxKey', label: 'Roots', type: 'number', min: 0, max: 7, format: v => v ? `from keys up to ${v} ♯ or ♭` : 'C D E F G A B only' },
+    { id: 'clef', label: 'Clef', type: 'choice', options: [['treble', 'Treble'], ['bass', 'Bass'], ['mix', 'Mixed']], show: s => s.mode !== 'symbol' },
+  ];
+  const DEFAULTS = { mode: 'name', types: ['maj', 'min'], inv: 'root', maxKey: 3, clef: 'treble' };
+
+  const page = UI.page({
+    drill: 'chords', title: 'Chords', settings: SPEC, defaults: DEFAULTS,
+    describe: item => { const c = fromItem(item); return UI.chordName(c.root, c.type, { bass: c.notes[0] }) + ` (${T.CHORDS[c.type].name})`; },
+    onSettings: () => start(), keyboard: { lo: 48, hi: 84 },
+  });
+
+  // roots: the notes of the major keys within the setting (so no E♯ or C♭ unless asked for)
+  function roots(max) {
+    const seen = new Map();
+    for (let f = -max; f <= max; f++) for (const n of T.scale(T.keyTonic(f, false)).slice(0, 7)) {
+      if (Math.abs(n.alter) <= 1 && !(max < 6 && ((n.step === 2 || n.step === 6) && n.alter === 1 || (n.step === 0 || n.step === 3) && n.alter === -1))) seen.set(T.name(n, { ascii: true }), n);
+    }
+    return [...seen.keys()];
+  }
+  function fromItem(item, staff = 'treble') {
+    const [type, r, inv] = item.split(':');
+    const root = T.parse(r + '4');
+    // put the chord on the staff: lowest note around the bottom of the staff
+    const win = staff === 'bass' ? [17, 23] : [29, 35];
+    let notes;
+    for (let oct = 1; oct <= 6; oct++) {
+      notes = T.chord({ ...root, octave: oct }, type, +inv);
+      if (T.dia(notes[0]) >= win[0] && T.dia(notes[0]) <= win[1]) break;
+    }
+    return { type, inv: +inv, root: { ...notes[(notes.length - +inv) % notes.length] }, notes, staff };
+  }
+
+  let S, q = null, wait = false;
+  const chordIn = ChordInput.create({ onResult: playResult });
+
+  function start() {
+    S = page.settings;
+    page.clearChoices();
+    next();
+  }
+
+  function items() {
+    const out = [];
+    for (const type of S.types) for (const r of roots(S.maxKey)) {
+      if (T.chord(T.parse(r), type).some(n => Math.abs(n.alter) > 2)) continue; // no triple sharps or flats
+      const invs = S.inv === 'all' ? T.CHORDS[type].tones.length : 1;
+      for (let i = 0; i < invs; i++) out.push(`${type}:${r}:${i}`);
+    }
+    return out;
+  }
+
+  function next() {
+    const item = page.pick(items(), { target: S.mode === 'name' ? 2500 : 3000, avoid: q ? [q.item] : [] });
+    const staff = S.clef === 'mix' ? UI.rand(['treble', 'bass']) : S.clef;
+    q = { item, missed: false, ...fromItem(item, staff) };
+    page.clearFlash();
+    page.kb.clear();
+    if (S.mode === 'symbol') {
+      page.el.prompt.innerHTML = `Play <span class="symbol">${UI.chordName(q.root, q.type, { bass: q.notes[0] })}</span><small>${T.CHORDS[q.type].name}${q.inv ? `, ${['', '1st', '2nd', '3rd'][q.inv]} inversion` : ''}, any octave</small>`;
+      page.el.card.innerHTML = '';
+    } else {
+      page.el.prompt.innerHTML = S.mode === 'name' ? 'Name this chord' : 'Play this chord<small>any octave' + (S.inv === 'all' ? ', with the written bass note lowest' : '') + '</small>';
+      draw();
+    }
+    if (S.mode === 'name') nameChoices();
+    else chordIn.expect(q.notes.map(T.midi), { bass: S.inv === 'all' ? T.pc(q.notes[0]) : null });
+    page.ask(item);
+    wait = false;
+  }
+
+  function draw(color, labels) {
+    page.el.card.innerHTML = Staff.svg({
+      clef: q.staff, items: [{ notes: q.notes, color, label: labels ? UI.chordName(q.root, q.type, { bass: q.notes[0] }) : '' }],
+      minWidth: 18, ledgers: 3,
+    });
+  }
+
+  function label(root, type, bass) { return UI.chordName(root, type, { bass }); }
+  function nameChoices() {
+    const right = label(q.root, q.type, q.notes[0]);
+    const opts = new Map([[right, true]]);
+    const types = S.types.length > 1 ? S.types : [...T.TRIADS, ...T.SEVENTHS].filter(t => T.CHORDS[t].tones.length === T.CHORDS[q.type].tones.length);
+    const tries = [];
+    // same root, other qualities
+    for (const t of types) if (t !== q.type) tries.push(label(q.root, t, S.inv === 'all' ? T.chord(q.root, t, q.inv)[0] : null));
+    // the bass note read as the root (the usual inversion mistake)
+    if (q.inv) tries.push(label(q.notes[0], q.type), label(q.notes[0], UI.rand(types)));
+    // a neighbouring root
+    for (const d of [-1, 1]) { const r = T.transpose(q.root, d, d * 2); if (Math.abs(r.alter) <= 1) tries.push(label(r, q.type, S.inv === 'all' ? T.chord(r, q.type, q.inv)[0] : null)); }
+    // the same chord in another inversion
+    if (S.inv === 'all') for (let i = 0; i < q.notes.length; i++) if (i !== q.inv) tries.push(label(q.root, q.type, T.chord(q.root, q.type, i)[0]));
+    for (const t of UI.shuffle(tries)) { if (opts.size >= 6) break; if (!opts.has(t)) opts.set(t, false); }
+    const list = UI.shuffle([...opts.entries()].map(([l, ok]) => ({ label: l, value: ok })));
+    page.choices(list, (ok, btn) => {
+      if (!q || wait) return;
+      if (ok) {
+        btn.classList.add('right');
+        done();
+      } else {
+        btn.classList.add('wrong');
+        miss(`It's <b>${right}</b>: ${q.notes.map(n => UI.noteName(n)).join(' – ')}`);
+      }
+    }, { columns: 3 });
+  }
+
+  function miss(text) {
+    if (!q.missed) page.answer(false);
+    q.missed = true;
+    page.flash(false, text);
+    if (S.mode !== 'name') q.notes.forEach(n => page.kb.mark(T.midi(n), 'hint'));
+  }
+  function done() {
+    if (!q.missed) page.answer(true);
+    wait = true;
+    page.flash(true, `${UI.chordName(q.root, q.type, { bass: q.notes[0] })} · ${q.notes.map(n => UI.noteName(n)).join(' – ')}`);
+    if (S.mode === 'symbol') { q.staff = q.staff || 'treble'; draw(GOOD, true); } else draw(GOOD, true);
+    Sound.chord(q.notes.map(T.midi), { dur: 1 });
+    setTimeout(next, S.mode === 'name' ? 700 : 1100);
+  }
+
+  // from ChordInput: { ok, wrongNotes, bassWrong, played }
+  function playResult(r) {
+    if (!q || wait) return;
+    if (r.ok) return done();
+    for (const m of r.wrongNotes || []) page.kb.mark(m, 'bad');
+    const names = r.played.map(m => UI.noteName(T.spell(m, 0))).join(' ');
+    const want = UI.chordName(q.root, q.type, { bass: q.notes[0] });
+    miss(r.bassWrong
+      ? `Right notes, but ${UI.noteName(q.notes[0])} must be the lowest (${want})`
+      : `You played ${names}. ${want} is ${q.notes.map(n => UI.noteName(n)).join(' – ')}`);
+  }
+
+  self.__state = () => q; // for the end-to-end test
+  start();
+})();
+</script>
+</body>
+</html>

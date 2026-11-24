@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4338ca">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Progressions</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/chordinput.js"></script>
+<script>
+// Progressions: the first look at a new piece. Read the key from the signature and the chords, then
+// name each bar's harmony as a Roman numeral. Or hear a progression and recognise it, or play one
+// in any key. Items: "key:<fifths><M|m>", "rn:<M|m>:<numeral>", "hear:<id>", "play:<M|m>:<numeral>".
+(() => {
+  const T = Theory;
+  const GOOD = '#16a34a', BAD = '#dc2626';
+  const SPEC = [
+    { id: 'mode', label: 'Drill', type: 'choice', options: [['read', 'Read it: key and chords'], ['hear', 'Hear it: which progression?'], ['play', 'Play it in a key']] },
+    { id: 'tonality', label: 'Keys', type: 'choice', options: [['major', 'Major'], ['minor', 'Minor'], ['both', 'Both']] },
+    { id: 'maxKey', label: 'Signatures', type: 'number', min: 0, max: 7, format: v => v ? `up to ${v} ♯ or ♭` : 'C major / A minor only' },
+  ];
+  const DEFAULTS = { mode: 'read', tonality: 'major', maxKey: 3 };
+
+  const page = UI.page({
+    drill: 'progressions', title: 'Progressions', settings: SPEC, defaults: DEFAULTS,
+    describe: item => {
+      const p = item.split(':');
+      if (p[0] === 'key') return `Finding the key: ${UI.keyName({ fifths: parseInt(p[1]), minor: p[1].endsWith('m') })}`;
+      if (p[0] === 'hear') return `Hearing ${T.PROGRESSIONS.find(x => x.id === p[1]).chords.join('–')}`;
+      return `${p[2]} in ${p[1] === 'm' ? 'minor' : 'major'}${p[0] === 'play' ? ' (playing)' : ''}`;
+    },
+    onSettings: () => start(), keyboard: { lo: 36, hi: 84 },
+  });
+
+  let S, q = null, wait = false, playing = [];
+  const chordIn = ChordInput.create({ onResult: playResult });
+
+  function start() { S = page.settings; next(); }
+
+  function modes() { return S.tonality === 'both' ? [false, true] : [S.tonality === 'minor']; }
+  function randomKey(minor) {
+    const keys = [];
+    for (let f = -S.maxKey; f <= S.maxKey; f++) keys.push(`key:${f}${minor ? 'm' : 'M'}`);
+    const item = page.pick(keys, { target: 4000 });
+    return { fifths: parseInt(item.split(':')[1]), minor };
+  }
+  function build(key, prog) {
+    const chords = T.voice(prog.chords.map(n => T.romanChord(key, n)));
+    return chords.map(c => ({ ...c, name: UI.chordName(c.root, c.type) }));
+  }
+
+  function stopSound() { playing.forEach(clearTimeout); playing = []; }
+
+  function next() {
+    stopSound();
+    chordIn.stop();
+    page.clearFlash(); page.kb.clear(); page.clearChoices();
+    wait = false;
+    const minor = UI.rand(modes());
+    const pool = T.PROGRESSIONS.filter(p => p.minor === minor);
+    if (S.mode === 'hear') {
+      const item = page.pick(pool.map(p => 'hear:' + p.id), { target: 6000, avoid: q ? [q.item] : [] });
+      const prog = pool.find(p => 'hear:' + p.id === item);
+      const key = randomKey(minor);
+      q = { item, prog, key, chords: build(key, prog), missed: false };
+      return askHear(pool);
+    }
+    const prog = UI.rand(pool);
+    const key = randomKey(minor);
+    q = { prog, key, chords: build(key, prog), bar: -1, missed: false };
+    if (S.mode === 'play') return askPlay(0);
+    askKey();
+  }
+
+  // ---------- read: the key, then each bar ----------
+  function draw({ labels = false, colors = [] } = {}) {
+    page.el.card.innerHTML = Staff.svg({
+      clef: 'grand', key: q.key.fifths, barlines: true, spacing: 10, ledgers: 2,
+      items: q.chords.map((c, i) => ({
+        notes: [{ ...c.bass, staff: 'bass' }, ...c.upper.map(n => ({ ...n, staff: 'treble' }))],
+        color: colors[i], mark: i === q.bar,
+        label: labels || i < q.bar ? c.name : '', sublabel: labels || i < q.bar ? c.numeral : '',
+      })),
+    });
+  }
+
+  function askKey() {
+    q.bar = -1;
+    q.stage = 'key';
+    const item = `key:${q.key.fifths}${q.key.minor ? 'm' : 'M'}`;
+    q.item = item;
+    draw();
+    page.el.prompt.innerHTML = 'What key is this in?<small>The signature gives two choices: the chords decide</small>';
+    const k = q.key;
+    const cands = [
+      { fifths: k.fifths, minor: !k.minor },                      // the relative key (same signature)
+      { fifths: k.fifths + (k.minor ? 3 : -3), minor: !k.minor }, // the parallel key (same tonic)
+      { fifths: k.fifths + 1, minor: k.minor },
+      { fifths: k.fifths - 1, minor: k.minor },
+      { fifths: k.fifths + 2, minor: k.minor },
+    ].filter(c => Math.abs(c.fifths) <= 7);
+    const opts = [{ label: UI.keyName(k), value: true }];
+    for (const c of cands) if (opts.length < 6) opts.push({ label: UI.keyName(c), value: false });
+    page.ask(item);
+    q.missed = false;
+    page.choices(UI.shuffle(opts), (ok, btn) => {
+      if (wait) return;
+      if (ok) {
+        btn.classList.add('right');
+        if (!q.missed) page.answer(true, { item });
+        page.flash(true, UI.keyName(k));
+        askBar(0);
+      } else {
+        btn.classList.add('wrong');
+        if (!q.missed) page.answer(false, { item });
+        q.missed = true;
+        page.flash(false, keyTip(k));
+      }
+    }, { columns: 3 });
+  }
+  function keyTip(k) {
+    const rel = UI.keyName({ fifths: k.fifths, minor: !k.minor });
+    if (k.minor) {
+      const lt = T.transpose(T.keyTonic(k.fifths, true), 6, 11);
+      return `It's <b>${UI.keyName(k)}</b>, not ${rel}: the chords start and end on ${UI.noteName(T.keyTonic(k.fifths, true))}` +
+        (q.prog.chords.includes('V') ? `, and the ${UI.noteName(lt)} (raised 7th) gives the minor key away.` : '.');
+    }
+    return `It's <b>${UI.keyName(k)}</b>, not ${rel}: the chords lean on ${UI.noteName(T.keyTonic(k.fifths, false))} major and there's no raised 7th of the minor.`;
+  }
+
+  function askBar(i) {
+    q.bar = i;
+    q.stage = 'bar';
+    q.missed = false;
+    if (i > 0) page.clearFlash();
+    const c = q.chords[i];
+    const item = `rn:${q.key.minor ? 'm' : 'M'}:${c.numeral}`;
+    q.item = item;
+    draw();
+    page.el.prompt.innerHTML = `Bar ${i + 1}: which chord?<small>in ${UI.keyName(q.key)}</small>`;
+    const numerals = T.diatonic(q.key);
+    page.ask(item);
+    page.choices(numerals.map(n => ({ label: n, value: n, sub: UI.chordName(T.romanChord(q.key, n).root, T.romanChord(q.key, n).type) })), (n, btn) => {
+      if (wait) return;
+      if (n === c.numeral) {
+        btn.classList.add('right');
+        if (!q.missed) page.answer(true, { item });
+        if (i + 1 < q.chords.length) { setTimeout(() => askBar(i + 1), 250); return; }
+        finishRead();
+      } else {
+        btn.classList.add('wrong');
+        if (!q.missed) page.answer(false, { item });
+        q.missed = true;
+        page.flash(false, `It's <b>${c.numeral}</b>: ${c.name} (${c.notes.map(n => UI.noteName(n)).join(' – ')})`);
+      }
+    }, { columns: numerals.length > 7 ? 5 : 7 });
+    // hide the chord names under the buttons: they'd give it away. Shown after answering.
+    page.el.answers.querySelectorAll('.choice-sub').forEach(s => s.style.visibility = 'hidden');
+  }
+
+  function finishRead() {
+    wait = true;
+    q.bar = -1;
+    draw({ labels: true });
+    page.clearChoices();
+    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${q.prog.name}</small>`;
+    page.flash(true, '');
+    const row = UI.h('div', { class: 'row' },
+      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ Listen'),
+      UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›'));
+    page.el.answers.append(row);
+    listen();
+  }
+
+  // play the chords and light up each bar as it sounds
+  function listen(show = true) {
+    stopSound();
+    const gap = 1.15;
+    Sound.sequence(q.chords.map(c => [T.midi(c.bass), ...c.upper.map(T.midi)]), { gap, dur: 1.05 });
+    if (!show) return;
+    q.chords.forEach((_, i) => playing.push(setTimeout(() => { q.bar = i; draw({ labels: true }); }, i * gap * 1000 + 20)));
+    playing.push(setTimeout(() => { q.bar = -1; draw({ labels: true }); }, q.chords.length * gap * 1000));
+  }
+
+  // ---------- hear ----------
+  function askHear(pool) {
+    page.el.card.innerHTML = '';
+    page.el.prompt.innerHTML = 'Which progression is this?<small>Hear where it rests and where it pulls</small>';
+    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, UI.h('button', { class: 'btn', onclick: () => listen(false) }, '▶ Play again')));
+    const others = UI.shuffle(pool.filter(p => p.id !== q.prog.id)).slice(0, 3);
+    const opts = UI.shuffle([q.prog, ...others]).map(p => ({ label: p.chords.join(' – '), sub: p.name, value: p.id }));
+    page.ask(q.item);
+    page.choices(opts, (id, btn) => {
+      if (wait) return;
+      if (id === q.prog.id) {
+        btn.classList.add('right');
+        if (!q.missed) page.answer(true);
+        wait = true;
+        page.flash(true, `${q.prog.chords.join(' – ')} in ${UI.keyName(q.key)}`);
+        draw({ labels: true });
+        page.el.answers.append(UI.h('div', { class: 'row' }, UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›')));
+      } else {
+        btn.classList.add('wrong');
+        if (!q.missed) page.answer(false);
+        q.missed = true;
+        page.flash(false, 'Not that one. Listen again: is the first chord home? Where does it land?');
+      }
+    }, { columns: 2 });
+    setTimeout(() => listen(false), 300);
+  }
+
+  // ---------- play ----------
+  function askPlay(i) {
+    q.bar = i;
+    const c = q.chords[i];
+    q.item = `play:${q.key.minor ? 'm' : 'M'}:${c.numeral}`;
+    q.missed = false;
+    const chips = q.chords.map((x, j) => `<span style="${j === i ? 'color:var(--accent);text-decoration:underline' : j < i ? 'color:var(--good)' : ''}">${x.numeral}</span>`).join(' – ');
+    page.el.prompt.innerHTML = `In <b>${UI.keyName(q.key)}</b>, play ${chips}<small>any voicing, any octave</small>`;
+    page.el.card.innerHTML = '';
+    page.ask(q.item);
+    chordIn.expect(c.notes.map(T.midi));
+  }
+  function playResult(r) {
+    if (!q || S.mode !== 'play' || wait) return;
+    const c = q.chords[q.bar];
+    if (!r.ok) {
+      for (const m of r.wrongNotes || []) page.kb.mark(m, 'bad');
+      if (!q.missed) page.answer(false);
+      q.missed = true;
+      c.notes.forEach(n => page.kb.mark(T.midi(n) + 12, 'hint'));
+      page.flash(false, `${c.numeral} in ${UI.keyName(q.key)} is <b>${c.name}</b>: ${c.notes.map(n => UI.noteName(n)).join(' – ')}`);
+      return;
+    }
+    if (!q.missed) page.answer(true);
+    page.clearFlash();
+    page.kb.clear();
+    if (q.bar + 1 < q.chords.length) return askPlay(q.bar + 1);
+    wait = true;
+    q.bar = -1;
+    draw({ labels: true });
+    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${q.prog.name}</small>`;
+    page.flash(true, 'Done. Here it is written out.');
+    page.el.answers.append(UI.h('div', { class: 'row' },
+      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ Listen'),
+      UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›')));
+  }
+
+  // Enter / space = next, when a round is finished
+  addEventListener('keydown', e => { if (wait && (e.key === 'Enter' || e.key === ' ') && !e.target.closest('dialog')) { e.preventDefault(); next(); } });
+
+  self.__state = () => q; // for the end-to-end test
+  start();
+})();
+</script>
+</body>
+</html>

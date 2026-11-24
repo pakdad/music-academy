@@ -1,0 +1,132 @@
+name: Build & Deploy
+
+# - Push to main      -> check, build the image, deploy it to the homelab
+# - Push a tag v1.2.3 -> the same, plus versioned images and a GitHub Release
+# - Run manually      -> deploy again, or roll back to an existing image tag
+# Never on pull requests: the homelab runner must not run code from strangers (see docs/homelab-setup.md).
+#
+# Editions: one image per edition (tools/build.mjs). Today only "adult"; a kids' edition becomes
+# another matrix row, its own image and its own deploy job.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Existing image tag to deploy instead of building (e.g. 1.2.0 or sha-<commit>). Leave empty to build.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ !inputs.image_tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - edition: adult
+            image: ghcr.io/${{ github.repository_owner }}/music-academy
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check the music theory and the pages
+        run: node tools/check.mjs
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: |
+            EDITION=${{ matrix.edition }}
+            BUILD_VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          push: true
+          # the homelab is x86-64; add linux/arm64 here for a Raspberry Pi
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.edition }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.edition }}
+
+  deploy:
+    needs: build
+    # also runs when build was skipped for a manual rollback
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: [self-hosted, music-academy-homelab]
+    environment: production
+    concurrency:
+      group: deploy-homelab
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag || format('sha-{0}', github.sha) }}
+      PORT: ${{ vars.HOMELAB_PORT || '8082' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull and start ${{ env.IMAGE_TAG }}
+        run: |
+          docker compose -p music-academy -f deploy/docker-compose.yml pull
+          docker compose -p music-academy -f deploy/docker-compose.yml up -d --remove-orphans
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "http://localhost:${PORT}/healthz"; then exit 0; fi
+            sleep 2
+          done
+          echo "Site did not come up on port ${PORT}" >&2
+          docker compose -p music-academy -f deploy/docker-compose.yml logs --tail 50
+          exit 1
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
+
+      - name: Clean up old images
+        if: always()
+        run: docker image prune -f --filter "label=org.opencontainers.image.source=https://github.com/${{ github.repository }}"
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
