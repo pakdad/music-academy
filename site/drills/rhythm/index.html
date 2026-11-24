@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<title>Rhythm</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/edition.js"></script>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/keyboard.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script>
+// Rhythm: read a rhythm on a one-line staff and tap it in time (any key, the pad, Space or J).
+// Exercises are built from rhythm figures ("cells"); each cell is an item in the statistics, so the
+// figures you miss come back more often.
+(() => {
+  const { h } = UI;
+  // a cell fills whole beats; at: where in the bar it may start (beats), so beaming and reading stay conventional
+  const CELLS = [
+    { id: 'q',    level: 1, len: 1, tokens: 'B4:4',              name: 'quarter note' },
+    { id: 'h',    level: 1, len: 2, tokens: 'B4:2',              name: 'half note', even: true },
+    { id: 'w',    level: 1, len: 4, tokens: 'B4:1',              name: 'whole note', whole: true },
+    { id: 'qr',   level: 1, len: 1, tokens: 'r:4',               name: 'quarter rest', rest: true },
+    { id: 'hd',   level: 1, len: 3, tokens: 'B4:2.',             name: 'dotted half note', first: true },
+    { id: 'ee',   level: 2, len: 1, tokens: 'B4:8 B4',           name: 'two eighths' },
+    { id: 'dqe',  level: 3, len: 2, tokens: 'B4:4. B4:8',        name: 'dotted quarter + eighth', even: true },
+    { id: 'eqe',  level: 4, len: 2, tokens: 'B4:8 B4:4 B4:8',    name: 'syncopation: eighth, quarter, eighth', even: true },
+    { id: 're',   level: 4, len: 1, tokens: 'r:8 B4:8',          name: 'eighth rest + eighth (off-beat)' },
+    { id: 'er',   level: 4, len: 1, tokens: 'B4:8 r:8',          name: 'eighth + eighth rest' },
+    { id: 'ssss', level: 5, len: 1, tokens: 'B4:16 B4 B4 B4',    name: 'four sixteenths' },
+    { id: 'ess',  level: 5, len: 1, tokens: 'B4:8 B4:16 B4',     name: 'eighth + two sixteenths' },
+    { id: 'sse',  level: 5, len: 1, tokens: 'B4:16 B4 B4:8',     name: 'two sixteenths + eighth' },
+    { id: 'des',  level: 5, len: 1, tokens: 'B4:8. B4:16',       name: 'dotted eighth + sixteenth' },
+  ];
+  const LEVELS = [[1, 'Whole, half, quarter'], [2, '+ Eighths'], [3, '+ Dotted rhythms'], [4, '+ Syncopation, off-beats'], [5, '+ Sixteenths']];
+  const SPEC = [
+    { id: 'level', label: 'Level', type: 'choice', options: LEVELS, hint: 'Each level adds new figures and keeps the earlier ones.' },
+    { id: 'time', label: 'Time', type: 'choice', options: [['4/4', '4/4'], ['3/4', '3/4'], ['2/4', '2/4'], ['mix', 'Mixed']] },
+    { id: 'bars', label: 'Length', type: 'choice', options: [[2, '2 bars'], [4, '4 bars']] },
+    { id: 'bpm', label: 'Tempo', type: 'number', min: 40, max: 160, step: 2, format: v => `♩ = ${v}` },
+    { id: 'click', label: 'Metronome while you tap', type: 'choice', options: [[true, 'On'], [false, 'Only the count-in']] },
+  ];
+  const DEFAULTS = { level: 1, time: '4/4', bars: 2, bpm: 80, click: true };
+
+  const page = UI.page({
+    drill: 'rhythm', title: 'Rhythm', settings: SPEC, defaults: DEFAULTS, hud: false, tools: ['midi', 'sound', 'keyboard', 'stats', 'settings'],
+    describe: id => (CELLS.find(c => c.id === id) || {}).name || id,
+    onSettings: () => next(), keyboard: { lo: 48, hi: 72, sound: false },
+  });
+  const el = page.el;
+  let S, ex = null, run = null, count = { n: 0, clean: 0 };
+  const sess = { id: Date.now().toString(36), drill: 'rhythm', start: Date.now(), n: 0, ok: 0, ms: 0 };
+  addEventListener('pagehide', () => UI.saveSession(sess));
+
+  // ---------- making an exercise ----------
+  function make() {
+    const time = S.time === 'mix' ? UI.rand(['4/4', '3/4', '2/4']) : S.time;
+    const beats = +time[0];
+    const cells = CELLS.filter(c => c.level <= S.level);
+    const fresh = cells.filter(c => c.level === S.level).map(c => c.id);
+    let best = null;
+    for (let tries = 0; tries < 40; tries++) {
+      const bars = [], used = [];
+      for (let b = 0; b < S.bars; b++) {
+        let pos = 0; const bar = [];
+        while (pos < beats) {
+          const fit = cells.filter(c => c.len <= beats - pos && (!c.even || (beats === 4 ? pos % 2 === 0 : true)) && (!c.first || pos === 0) && (!c.whole || (pos === 0 && beats === 4)));
+          let id = UI.pick('rhythm', fit.map(c => c.id), { target: 1 });
+          if (fresh.length && Math.random() < 0.3) { const f = fit.filter(c => fresh.includes(c.id)); if (f.length) id = UI.rand(f).id; }
+          const c = cells.find(c => c.id === id);
+          bar.push(c); used.push({ cell: c, t: bars.length * beats + pos });
+          pos += c.len;
+        }
+        bars.push(bar);
+      }
+      const rests = used.filter(u => u.cell.rest).length;
+      const text = bars.map(b => b.map(c => c.tokens).join(' ')).join(' | ');
+      if (bars[0][0].rest || rests > used.length / 3 || (ex && text === ex.text)) continue;
+      best = { time, beats, used, text };
+      break;
+    }
+    if (!best) best = { time, beats, used: [{ cell: CELLS[0], t: 0 }], text: Array(S.bars).fill(Array(beats).fill('B4:4').join(' ')).join(' | ') };
+    return best;
+  }
+
+  function next() {
+    stop();
+    S = page.settings;
+    ex = make();
+    draw();
+    el.prompt.innerHTML = `Read it, then tap it in time<small>Any key, the pad, Space or J · ${ex.time} · ♩ = ${S.bpm}</small>`;
+    el.feedback.className = 'feedback';
+    el.answers.innerHTML = '';
+    el.answers.append(
+      h('div', { class: 'row' },
+        h('button', { class: 'btn', onclick: () => go(true) }, '▶ Listen'),
+        h('button', { class: 'btn primary big', onclick: () => go(false) }, '● Tap it'),
+        h('button', { class: 'btn ghost', onclick: () => next() }, 'New rhythm ›')),
+      pad);
+  }
+  function draw() {
+    const width = Math.max(40, Math.min(110, Math.round((el.card.parentElement.clientWidth - 40) / 10.5)));
+    ex.L = Score.layout({ clef: 'rhythm', rh: ex.text, time: [ex.beats, 4], title: 'Rhythm' }, { width });
+    el.card.innerHTML = ex.L.svg;
+    el.card.classList.add('score-card', 'rhythm-card');
+    ex.svg = el.card.querySelector('svg');
+    ex.ph = ex.svg.querySelector('.playhead');
+    ex.ev = [...ex.svg.querySelectorAll('.ev')].reduce((m, g) => (m[g.dataset.i] = g, m), {});
+  }
+  const pad = h('button', { class: 'pad', onpointerdown: e => { e.preventDefault(); tap(e.timeStamp || performance.now(), true); } }, 'Tap here');
+
+  // ---------- listening and tapping ----------
+  function go(listen) {
+    stop();
+    draw();
+    el.feedback.className = 'feedback';
+    const L = ex.L, beats = ex.beats;
+    const countIn = beats;
+    const tr = Transport.create({
+      bpm: S.bpm,
+      onStep: (s, time) => {
+        const q = s - countIn;
+        if (q >= L.length) return;
+        if (q < 0 || S.click || listen) Sound.click(time, (((s % beats) + beats) % beats) === 0 ? 2 : 1, q < 0 ? 1 : 0.7);
+      },
+    });
+    const spb = tr.spb;
+    if (listen) for (const e of L.events) if (!e.rest) tr.at(e.t + countIn, time => Sound.note(72, { when: time, dur: Math.max(0.12, e.d * spb * 0.85), vel: 0.7 }));
+    const expected = listen ? [] : L.events.filter(e => !e.rest).map(e => ({ e, beat: e.t + countIn, done: false }));
+    const msBeat = tr.msPerBeat;
+    run = { listen, tr, countIn, expected, msBeat, win: Math.min(220, 0.45 * msBeat * Math.min(1, ...L.events.filter(e => !e.rest).map(e => e.d * 2))), good: Math.max(45, 0.1 * msBeat), hits: [], extra: [] };
+    run.win = Math.max(run.win, 90);
+    tr.start();
+    const loop = () => {
+      if (!run) return;
+      const beat = tr.beatNow(), b = beat - countIn;
+      if (b < 0) { el.prompt.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span><small>${listen ? 'Listen…' : 'Count in, then tap'}</small>`; }
+      else {
+        el.prompt.innerHTML = listen ? 'Listen…<small>&nbsp;</small>' : 'Tap!<small>&nbsp;</small>';
+        playhead(b);
+      }
+      if (!listen) {
+        const late = beat - run.win / msBeat;
+        for (const x of expected) if (!x.done && x.beat < late) { x.done = true; x.miss = true; mark(x.e, 'bad'); }
+      }
+      if (b > L.length + 0.3) return finish();
+      run.raf = requestAnimationFrame(loop);
+    };
+    run.raf = requestAnimationFrame(loop);
+  }
+  function playhead(t) {
+    const m = ex.L.marks;
+    let i = 0;
+    while (i + 1 < m.length && m[i + 1].t <= t) i++;
+    const a = m[i], b = m[i + 1];
+    const x = b && b.sys === a.sys && b.t > a.t ? a.x + (b.x - a.x) * Math.min(1, (t - a.t) / (b.t - a.t)) : a.x;
+    const box = ex.L.systems[a.sys];
+    ex.ph.setAttribute('x', x - 8); ex.ph.setAttribute('y', box.top); ex.ph.setAttribute('height', box.bottom - box.top);
+    ex.ph.classList.add('on');
+  }
+  const mark = (e, c) => { const g = ex.ev[e.i]; g.classList.remove('cur', 'good', 'off', 'bad'); g.classList.add(c); };
+
+  function tap(time, fromScreen) {
+    if (!run) return go(false);
+    if (run.listen) return;
+    if (fromScreen) Sound.click(null, 0, 0.5);
+    const at = run.tr.beatOfPerf(time - (UI.prefs.latency || 0));
+    let best = null;
+    for (const x of run.expected) if (!x.done && Math.abs(at - x.beat) * run.msBeat <= run.win && (!best || Math.abs(at - x.beat) < Math.abs(at - best.beat))) best = x;
+    if (!best) { if (at > run.countIn - 0.5) run.extra.push(at - run.countIn); return; }
+    best.done = true;
+    best.off = (at - best.beat) * run.msBeat;
+    run.hits.push(best.off);
+    mark(best.e, Math.abs(best.off) <= run.good ? 'good' : 'off');
+  }
+
+  function stop() {
+    if (!run) return;
+    run.tr.stop();
+    cancelAnimationFrame(run.raf);
+    run = null;
+    if (ex && ex.ph) ex.ph.classList.remove('on');
+  }
+  function finish() {
+    const r = run;
+    stop();
+    if (r.listen) { el.prompt.innerHTML = `Now you: tap it<small>Any key, the pad, Space or J · ${ex.time} · ♩ = ${S.bpm}</small>`; return; }
+    const total = r.expected.length;
+    const onTime = r.expected.filter(x => !x.miss && Math.abs(x.off) <= r.good).length;
+    const hit = r.expected.filter(x => !x.miss).length;
+    const score = Math.max(0, Math.round((onTime + 0.6 * (hit - onTime)) / total * 100 - 8 * r.extra.length));
+    const mean = r.hits.length ? r.hits.reduce((a, b) => a + b, 0) / r.hits.length : 0;
+    // each figure counts as right when all its notes landed in time and no extra tap fell inside it
+    for (const u of ex.used) {
+      const notes = r.expected.filter(x => x.e.t >= u.t - 1e-9 && x.e.t < u.t + u.cell.len - 1e-9);
+      const extraIn = r.extra.some(b => b >= u.t - 0.25 && b < u.t + u.cell.len - 0.25);
+      const ok = notes.every(x => !x.miss && Math.abs(x.off) <= r.good * 1.6) && !extraIn;
+      UI.record('rhythm', u.cell.id, ok, 0);
+    }
+    count.n++; if (score >= 90) count.clean++;
+    sess.n++; if (score >= 90) { sess.ok++; } UI.saveSession(sess);
+    el.prompt.innerHTML = `${score} %<small>${count.clean} of ${count.n} rhythms clean this session</small>`;
+    el.feedback.className = 'feedback show ' + (score >= 90 ? 'ok' : score >= 60 ? 'info' : 'bad');
+    el.feedback.innerHTML = `${onTime} of ${total} on time` + (hit > onTime ? `, ${hit - onTime} a little off` : '') + (total > hit ? `, ${total - hit} missed` : '') +
+      (r.extra.length ? `, ${r.extra.length} extra tap${r.extra.length > 1 ? 's' : ''}` : '') +
+      (r.hits.length > 2 && Math.abs(mean) > 20 ? ` · on average ${Math.round(Math.abs(mean))} ms ${mean > 0 ? 'late' : 'early'}` : '') +
+      `<br><span class="muted">${score >= 90 ? 'Enter: next rhythm' : 'Space: try again · L: listen · Enter: next'}</span>`;
+  }
+
+  Input.on(e => { if (e.type === 'on') tap(e.time, e.source === 'screen'); });
+  addEventListener('keydown', e => {
+    if (e.target.closest('dialog, input') || e.repeat) return;
+    if (e.code === 'Space' || e.code === 'KeyJ' || e.code === 'KeyF') { e.preventDefault(); tap(e.timeStamp || performance.now(), true); }
+    else if (e.code === 'Enter') { e.preventDefault(); next(); }
+    else if (e.code === 'KeyL') { e.preventDefault(); go(true); }
+  });
+  self.__state = () => ({ run, ex, S });
+  next();
+})();
+</script>
+</body>
+</html>

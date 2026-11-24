@@ -202,3 +202,8 @@ table.stats td.bad { color: var(--bad); }
 .pad { width: 100%; padding: 28px; border-radius: 16px; border: 2px dashed var(--line); background: transparent; font-size: 18px; font-weight: 650; color: var(--muted); cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 .pad:active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .cal { justify-content: flex-start; align-items: center; }
+.score .finger { font: italic 650 13px Georgia, "Times New Roman", serif; fill: currentColor; }
+.score .ev.dim .finger { opacity: .8; }
+.imslp { display: inline-block; margin-top: 6px; font-size: 14px; }
+.card.score-card { width: 100%; }
+.rhythm-card { max-width: 1100px; }

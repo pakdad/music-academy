@@ -145,10 +145,20 @@ for (const p of ctx.self.PIECES) {
     if (!p[v]) continue;
     let parsed;
     try { parsed = Score.parseVoice(p[v], v); } catch (e) { failed++; console.error(`✗ ${what}: ${e.message}`); continue; }
+    const pickup = p.pickup || 0;
     parsed.bars.forEach((len, i) => {
-      if (Math.abs(len - L) > 1e-9) { failed++; console.error(`✗ ${what} ${v} bar ${i + 1}: ${len} quarter notes, the time signature says ${L}`); }
+      const want = pickup && i === 0 ? pickup : L;
+      const lastOk = pickup && i === parsed.bars.length - 1 && Math.abs(len - (L - pickup)) < 1e-9;
+      if (Math.abs(len - want) > 1e-9 && !lastOk) { failed++; console.error(`✗ ${what} ${v} bar ${i + 1}: ${len} quarter notes, should be ${want}`); }
       else passed++;
     });
+    // fingering in chords must make sense: right hand's fingers rise with the pitch, left hand's fall
+    for (const e of parsed.events) {
+      const fs = e.notes.filter(n => n.finger).sort((a, b) => T.midi(a) - T.midi(b)).map(n => n.finger);
+      if (fs.length < 2) continue;
+      const ok = fs.every((x, i) => !i || (v === 'rh' ? x > fs[i - 1] : x < fs[i - 1]));
+      if (!ok) { failed++; console.error(`✗ ${what} ${v}: chord fingering ${fs.join('-')} (bottom to top) is impossible`); } else passed++;
+    }
     lengths.push(parsed.length);
     // hands stay on their staff: right hand from G3 up, left hand up to E4
     for (const e of parsed.events) for (const n of e.notes) {
@@ -159,9 +169,9 @@ for (const p of ctx.self.PIECES) {
   }
   if (!lengths.length) { failed++; console.error(`✗ ${what}: no notes`); }
   if (lengths.length === 2 && Math.abs(lengths[0] - lengths[1]) > 1e-9) { failed++; console.error(`✗ ${what}: the hands have different lengths (${lengths.join(' / ')})`); }
-  for (const width of [44, 70, 120]) {
+  for (const [width, fingering] of [[44, false], [70, true], [120, true]]) {
     try {
-      const out = Score.layout(p, { width });
+      const out = Score.layout(p, { width, fingering });
       if (out.svg.includes('NaN') || out.svg.includes('undefined')) throw new Error('bad SVG');
       if (!out.marks.length || out.events.some(e => !e.rest && e.midis.some(m => !(m > 0)))) throw new Error('bad events');
       rendered++;

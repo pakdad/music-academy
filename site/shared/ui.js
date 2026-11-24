@@ -303,7 +303,7 @@
     for (const [k, v] of Object.entries(obj.data)) store.set(k, v);
   }
 
-  self.UI = { store, prefs, setPref, noteName, keyName, chordName, page, pick, stats, summary, h, $, shuffle, rand, sec, exportData, importData };
+  self.UI = { store, prefs, setPref, noteName, keyName, chordName, page, pick, stats, record, saveSession, summary, h, $, shuffle, rand, sec, exportData, importData };
 })();
 
 // offline support (needs https or localhost)

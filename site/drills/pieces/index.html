@@ -38,7 +38,7 @@
   const LEVELS = { 1: 'Level 1 · one hand', 2: 'Level 2 · both hands, simple', 3: 'Level 3 · both hands, more going on' };
 
   const prefsKey = 'pieces:settings';
-  const settings = Object.assign({ mode: 'wait', metronome: true, accomp: true }, UI.store.get(prefsKey, {}));
+  const settings = Object.assign({ mode: 'wait', metronome: true, accomp: true, fingering: false }, UI.store.get(prefsKey, {}));
   const saveSettings = () => UI.store.set(prefsKey, settings);
   const pieceSettings = p => Object.assign({ bpm: p.tempo, hands: p.rh && p.lh ? 'both' : p.rh ? 'rh' : 'lh' }, UI.store.get('pieces:piece:' + p.id, {}));
   const best = () => UI.store.get('pieces:best', {});
@@ -55,7 +55,8 @@
     const b = best();
     stage.append(h('div', { class: 'lib-intro' },
       h('h2', {}, 'Pieces'),
-      h('p', { class: 'muted' }, 'Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.')));
+      h('p', { class: 'muted' }, 'Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.'),
+      h('p', { class: 'muted' }, 'The classics are public domain; for the full original scores, each links to IMSLP, the Petrucci Music Library. Finger numbers can be switched on in every piece.')));
     for (const level of [1, 2, 3]) {
       const ps = PIECES.filter(p => p.level === level);
       if (!ps.length) continue;
@@ -99,8 +100,8 @@
       draw(value);
       return el;
     };
-    const toggle = (key, label) => h('label', { class: 'tgl' },
-      h('input', { type: 'checkbox', checked: settings[key], onchange: e => { settings[key] = e.target.checked; saveSettings(); } }), label);
+    const toggle = (key, label, after) => h('label', { class: 'tgl' },
+      h('input', { type: 'checkbox', checked: settings[key], onchange: e => { settings[key] = e.target.checked; saveSettings(); after && after(); } }), label);
 
     stage.append(
       h('div', { class: 'phead' },
@@ -108,12 +109,13 @@
         h('h2', {}, P.title),
         h('div', { class: 'muted' }, P.by),
         h('div', { class: 'pcard-meta' }, `${keyName(P)} · ${P.time.join('/')} · ${handsOf(P)}`),
-        h('p', { class: 'pabout' }, P.about)),
+        h('p', { class: 'pabout' }, P.about),
+        P.imslp ? h('a', { class: 'imslp', href: P.imslp, target: '_blank', rel: 'noopener' }, 'Full original score on IMSLP ↗') : null),
       h('div', { class: 'controls' },
         h('div', { class: 'ctl' }, h('span', {}, 'Mode'), seg([['wait', 'Wait for me'], ['play', 'Play along'], ['listen', 'Listen']], settings.mode, v => { settings.mode = v; saveSettings(); refreshControls(); })),
         P.rh && P.lh ? h('div', { class: 'ctl' }, h('span', {}, 'Hands'), seg(Object.entries(HANDS), PS.hands, v => { PS.hands = v; savePiece(); render(); refreshControls(); })) : null,
         h('div', { class: 'ctl tempo' }, h('span', {}, 'Tempo'), tempo, els.tempoOut),
-        els.toggles = h('div', { class: 'ctl toggles' }, toggle('metronome', 'Metronome'),
+        els.toggles = h('div', { class: 'ctl toggles' }, toggle('fingering', 'Finger numbers', () => { if (!run) render(); }), toggle('metronome', 'Metronome'),
           els.accomp = toggle('accomp', 'Play the other hand for me')),
         h('div', { class: 'ctl go' }, els.start, els.status)),
       els.score, els.result);
@@ -130,7 +132,7 @@
 
   function render() {
     const width = Math.max(44, Math.min(120, Math.round((els.score.clientWidth || 900) / 10.5)));
-    L = Score.layout(P, { width });
+    L = Score.layout(P, { width, fingering: settings.fingering });
     els.score.innerHTML = L.svg;
     els.svg = els.score.querySelector('svg');
     els.ph = els.svg.querySelector('.playhead');
@@ -229,14 +231,20 @@
 
   // play along / listen: the transport runs; notes are judged against the beat
   function startTimed(listen) {
-    const [num] = P.time;
-    const countIn = listen ? 0 : L.L; // playing along: always a bar to count in
+    const [num, den] = P.time;
+    // playing along: a bar to count in; with a pickup, the count-in runs on until the pickup's beat
+    const countIn = listen ? 0 : L.pickup ? 2 * L.L - L.pickup : L.L;
+    const steps = den === 8 ? 2 : 1;            // clicks on every eighth in 3/8 and 6/8, else every beat
+    const beatEvery = den === 8 && num % 3 === 0 && num > 3 ? 1.5 : den === 8 ? L.L : 1;
     const tr = Transport.create({
-      bpm: PS.bpm,
+      bpm: PS.bpm, stepsPerBeat: steps,
       onStep: (s, time) => {
-        const b = s - countIn;
-        if (b >= L.length) return;
-        if (b < 0 || settings.metronome) Sound.click(time, ((s % num) + num) % num === 0 ? 2 : 1, b < 0 ? 1 : 0.8);
+        const q = s / steps - countIn;          // where in the piece, in quarter notes
+        if (q >= L.length - 1e-9) return;
+        if (q >= 0 && !settings.metronome) return;
+        const inBar = (((q - L.pickup) % L.L) + L.L) % L.L;
+        const level = inBar < 1e-6 || L.L - inBar < 1e-6 ? 2 : Math.abs(inBar / beatEvery - Math.round(inBar / beatEvery)) < 1e-6 ? 1 : 0;
+        Sound.click(time, level, q < 0 ? 1 : 0.8);
       },
     });
     const spb = tr.spb;

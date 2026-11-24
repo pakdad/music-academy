@@ -1,33 +1,39 @@
 // Engraves a piece: one or two hands, in bars with real rhythm, over as many lines as it needs.
 //
 // A hand is written as text, bar by bar:
-//   'E4:4 E4 F4 G4 | G4:4. F4:8 E4:2 | C3+E3+G3:1 | r:2 C4'
+//   'E4@3:4 E4 F4@4 G4@5 | G4:4. F4:8 E4:2 | C3@5+E3@3+G3@1:1 | r:2 C4:16 D4 E4 F4 G4:8. A4:16'
 //   pitch     C4 (middle C), F#4, Bb3, Ebb4, Fx4; a chord joins pitches with +; r is a rest
-//   :length   1 whole, 2 half, 4 quarter, 8 eighth, with a dot for dotted (2. = dotted half).
+//   @finger   optional fingering, 1 (thumb) to 5, per note
+//   :length   1 whole, 2 half, 4 quarter, 8 eighth, 16 sixteenth, with a dot for dotted (2. = dotted half).
 //             The length carries on until the next one is given.
 //   |         a bar line (tools/check.mjs checks every bar adds up)
 //
-//   const L = Score.layout(piece, { width: 90 })   piece: { rh, lh, key, time: [3, 4], clef }
+//   const L = Score.layout(piece, { width: 90, fingering: true })
+//     piece: { rh, lh, key, time: [3, 4], pickup (quarter notes before the first full bar), clef }
+//     clef 'rhythm' draws a one-line staff for rhythm reading (write the notes as B4)
 //   el.innerHTML = L.svg
 //   L.events  [{ i, voice: 'rh' | 'lh', t (in quarter notes), d, midis, rest, m (bar) }]; drawn as <g class="ev" data-i>
 //   L.marks   [{ t, sys, x }] where the playhead is at time t;  L.systems [{ top, bottom }]  (SVG units)
+//   L.barStart(m)  when bar m starts (bar 0 is the pickup, if there is one)
 (function () {
   const T = self.Theory, GL = self.GLYPHS;
   const S = 10, k = S / 250;
-  const TOP = { treble: 38, bass: 26 }, MID = { treble: 34, bass: 22 };
+  const TOP = { treble: 38, bass: 26, rhythm: 38 }, MID = { treble: 34, bass: 22, rhythm: 34 };
   const ACC_GLYPH = { '-2': 'accidentalDoubleFlat', '-1': 'accidentalFlat', 0: 'accidentalNatural', 1: 'accidentalSharp', 2: 'accidentalDoubleSharp' };
   const SHARP_POS = ['F5', 'C5', 'G5', 'D5', 'A4', 'E5', 'B4'].map(s => T.dia(T.parse(s)));
   const FLAT_POS = ['B4', 'E5', 'A4', 'D5', 'G4', 'C5', 'F4'].map(s => T.dia(T.parse(s)));
   const HEAD = { 1: 'noteheadWhole', 2: 'noteheadHalf', 4: 'noteheadBlack', 8: 'noteheadBlack', 16: 'noteheadBlack' };
-  const REST = { 1: 'restWhole', 2: 'restHalf', 4: 'restQuarter', 8: 'rest8th' };
+  const REST = { 1: 'restWhole', 2: 'restHalf', 4: 'restQuarter', 8: 'rest8th', 16: 'rest16th' };
   const f = v => Math.round(v * S * 100) / 100; // spaces → SVG units
 
   const use = (n, x, y, attrs = '', sx = 1, sy = 1) =>
     `<use href="#g-${n}" transform="translate(${f(x)} ${f(y)}) scale(${Math.round(k * sx * 1e5) / 1e5} ${Math.round(-k * sy * 1e5) / 1e5})"${attrs}/>`;
   const line = (x1, y1, x2, y2, w) => `<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="currentColor" stroke-width="${f(w)}"/>`;
+  const poly = (xa, ya, xb, yb, t) => `<polygon points="${f(xa)},${f(ya)} ${f(xb)},${f(yb)} ${f(xb)},${f(yb + t)} ${f(xa)},${f(ya + t)}"/>`;
 
   // ---------- reading the text ----------
-  const TOKEN = /^(r|[A-G](?:bb|b|##|#|x)?-?\d(?:\+[A-G](?:bb|b|##|#|x)?-?\d)*)(?::(1|2|4|8|16)(\.)?)?$/;
+  const NOTE = '[A-G](?:bb|b|##|#|x)?-?\\d(?:@[1-5])?';
+  const TOKEN = new RegExp(`^(r|${NOTE}(?:\\+${NOTE})*)(?::(1|2|4|8|16)(\\.)?)?$`);
   function parseVoice(src, voice) {
     const events = [], bars = [];
     let t = 0, type = 4, dotted = false, barStart = 0;
@@ -37,26 +43,36 @@
       if (!m) throw new Error(`${voice}: can't read "${tok}"`);
       if (m[2]) { type = +m[2]; dotted = !!m[3]; }
       const d = (4 / type) * (dotted ? 1.5 : 1);
-      events.push({ voice, t, d, type, dotted, rest: m[1] === 'r', notes: m[1] === 'r' ? [] : m[1].split('+').map(T.parse) });
+      const notes = m[1] === 'r' ? [] : m[1].split('+').map(p => {
+        const [pitch, finger] = p.split('@');
+        const n = T.parse(pitch);
+        if (finger) n.finger = +finger;
+        return n;
+      });
+      events.push({ voice, t, d, type, dotted, rest: m[1] === 'r', notes });
       t += d;
     }
     if (t > barStart + 1e-9) bars.push(t - barStart);
     return { events, bars, length: t };
   }
 
-  function layout(piece, { width = 90 } = {}) {
+  function layout(piece, { width = 90, fingering = false } = {}) {
     if (typeof document !== 'undefined' && self.Staff) Staff.ensureDefs();
     const [num, den] = piece.time;
     const L = num * 4 / den;
-    const key = piece.key || 0;
+    const pickup = piece.pickup || 0;
+    const rhythm = piece.clef === 'rhythm';
+    const key = rhythm ? 0 : piece.key || 0;
     const voices = ['rh', 'lh'].filter(v => piece[v]).map(v => parseVoice(piece[v], v));
     const grand = voices.length === 2;
     const staffOf = v => grand ? (v === 'rh' ? 'treble' : 'bass') : (piece.clef || (v === 'rh' ? 'treble' : 'bass'));
     const staves = grand ? ['treble', 'bass'] : [staffOf(voices[0].events[0].voice)];
+    const barStart = m => pickup ? (m === 0 ? 0 : pickup + (m - 1) * L) : m * L;
+    const barOf = t => pickup ? (t < pickup - 1e-9 ? 0 : 1 + Math.floor((t - pickup) / L + 1e-9)) : Math.floor(t / L + 1e-9);
     const events = voices.flatMap(v => v.events).sort((a, b) => a.t - b.t || (a.voice === 'rh' ? -1 : 1));
-    events.forEach((e, i) => { e.i = i; e.staff = staffOf(e.voice); e.m = Math.floor(e.t / L + 1e-9); e.midis = e.notes.map(T.midi); });
+    events.forEach((e, i) => { e.i = i; e.staff = staffOf(e.voice); e.m = barOf(e.t); e.midis = e.notes.map(T.midi); });
     const length = Math.max(...voices.map(v => v.length));
-    const nBars = Math.ceil(length / L - 1e-9);
+    const nBars = barOf(length - 1e-6) + 1;
 
     // accidentals: against the key signature, and against earlier notes in the bar
     let carry = {}, bar = -1;
@@ -65,7 +81,7 @@
       for (const n of e.notes) {
         const pos = e.staff + T.dia(n);
         const inForce = pos in carry ? carry[pos] : T.keyAlter(key, n.step);
-        n.showAcc = n.alter !== inForce ? n.alter : null;
+        n.showAcc = rhythm || n.alter === inForce ? null : n.alter;
         carry[pos] = n.alter;
       }
       // seconds: the upper note steps right; accidentals in columns from the top down
@@ -86,7 +102,7 @@
       const evs = events.filter(e => e.m === m);
       const onsets = [...new Set(evs.map(e => e.t))].sort((a, b) => a - b);
       const cols = onsets.map((t, j) => {
-        const next = j + 1 < onsets.length ? onsets[j + 1] : (m + 1) * L;
+        const next = j + 1 < onsets.length ? onsets[j + 1] : barStart(m + 1);
         const at = evs.filter(e => e.t === t);
         const acc = Math.max(0, ...at.map(e => e.accCols));
         const right = at.some(e => e.notes.some(n => n.right));
@@ -100,7 +116,8 @@
     const sig = T.keySignature(key);
     const x0 = grand ? 2.4 : 0.8;
     const keyW = sig.reduce((a, s) => a + (s.alter > 0 ? 1.15 : 1.05), 0) + (sig.length ? 0.7 : 0);
-    const headOther = x0 + 3.7 + keyW + 0.4;
+    const clefW = rhythm ? 2.6 : 3.7;
+    const headOther = x0 + clefW + keyW + 0.4;
     const headFirst = headOther + 2.6;
     const systems = [];
     let cur = { bars: [], head: headFirst, w: 0 };
@@ -109,7 +126,7 @@
       cur.bars.push(b); cur.w += b.w;
     }
     systems.push(cur);
-    const margin = 4.6, gap = 8;
+    const margin = rhythm ? 3.6 : fingering ? 5.4 : 4.6, gap = fingering ? 9 : 8;
     let y0 = 0.4;
     systems.forEach((s, si) => {
       const avail = width - 0.5 - s.head;
@@ -139,9 +156,10 @@
     const out = [];
     systems.forEach((s, si) => {
       for (const st of staves) {
-        for (let i = 0; i < 5; i++) out.push(line(x0, s.tops[st] + i, s.right, s.tops[st] + i, 0.13));
-        out.push(st === 'treble' ? use('gClef', x0 + 0.9, Y(s, st, 32)) : use('fClef', x0 + 0.9, Y(s, st, 24)));
-        let sx = x0 + 4.4;
+        if (st === 'rhythm') out.push(line(x0, s.tops[st] + 2, s.right, s.tops[st] + 2, 0.13));
+        else for (let i = 0; i < 5; i++) out.push(line(x0, s.tops[st] + i, s.right, s.tops[st] + i, 0.13));
+        out.push(st === 'treble' ? use('gClef', x0 + 0.9, Y(s, st, 32)) : st === 'bass' ? use('fClef', x0 + 0.9, Y(s, st, 24)) : use('unpitchedPercussionClef1', x0 + 0.5, s.tops[st] + 2));
+        let sx = x0 + clefW + 0.7;
         sig.forEach((a, i) => {
           out.push(use(ACC_GLYPH[a.alter], sx, Y(s, st, (a.alter > 0 ? SHARP_POS : FLAT_POS)[i] - (st === 'bass' ? 14 : 0))));
           sx += a.alter > 0 ? 1.15 : 1.05;
@@ -151,34 +169,38 @@
           out.push(use('timeSig' + num, tx, s.tops[st] + 1), use('timeSig' + den, tx, s.tops[st] + 3));
         }
       }
-      const top = s.tops[staves[0]], bottom = s.bottom;
-      out.push(line(x0, top, x0, bottom, 0.16));
+      const top = rhythm ? s.tops.rhythm + 1 : s.tops[staves[0]], bottom = rhythm ? s.tops.rhythm + 3 : s.bottom;
+      if (!rhythm) out.push(line(x0, top, x0, bottom, 0.16));
       if (grand) out.push(use('brace', x0 - 1.7, bottom, '', (bottom - top) / 4 * 1.25, (bottom - top) / 4));
-      if (si > 0) out.push(`<text class="barno" x="${f(x0)}" y="${f(top - 1.6)}">${s.bars[0].m + 1}</text>`);
+      if (si > 0) out.push(`<text class="barno" x="${f(x0)}" y="${f(s.tops[staves[0]] - 1.6)}">${pickup ? s.bars[0].m : s.bars[0].m + 1}</text>`);
       s.bars.forEach(b => {
         const bx = b.x + b.w2, last = b.m === nBars - 1;
-        if (last) {
-          out.push(line(bx - 0.9, top, bx - 0.9, bottom, 0.16), line(bx - 0.25, top, bx - 0.25, bottom, 0.5));
-        } else out.push(line(bx, top, bx, bottom, 0.16)); // piano bar lines run through both staves
+        if (last) out.push(line(bx - 0.9, top, bx - 0.9, bottom, 0.16), line(bx - 0.25, top, bx - 0.25, bottom, 0.5));
+        else out.push(line(bx, top, bx, bottom, 0.16)); // piano bar lines run through both staves
       });
     });
 
     // where each event's noteheads go
     for (const e of events) {
       const b = bars[e.m], s = systems[b.sys], c = b.cols.find(c => c.t === e.t);
-      e.sys = b.sys; e.x = c.x + c.acc * 1.2; e.colX = c.x;
+      e.sys = b.sys; e.x = c.x + c.acc * 1.2;
       e.ys = e.notes.map(n => Y(s, e.staff, T.dia(n)));
     }
 
-    // beams: eighths together within a beat (in 4/4: within half a bar), same hand, no rests between
-    const G = L === 4 ? 2 : 1;
+    // beams: eighths and sixteenths together within a beat group, same hand, no rests between.
+    // Groups: 6/8 and 3/8 in dotted quarters, 4/4 in half bars (in beats when there are sixteenths), else beats.
     const groups = [];
     for (const v of ['rh', 'lh']) {
+      const mine = events.filter(e => e.voice === v);
+      const sixteenthBars = new Set(mine.filter(e => e.type === 16).map(e => e.m));
       let g = null;
-      for (const e of events.filter(e => e.voice === v)) {
-        const ok = e.type === 8 && !e.rest;
-        const slot = e.m * 100 + Math.floor((e.t - e.m * L) / G + 1e-9);
-        if (ok && g && g.slot === slot && Math.abs(g.evs[g.evs.length - 1].t + g.evs[g.evs.length - 1].d - e.t) < 1e-9) g.evs.push(e);
+      for (const e of mine) {
+        const G = den === 8 ? 1.5 : L === 4 && !sixteenthBars.has(e.m) ? 2 : 1;
+        const ok = e.type >= 8 && !e.rest;
+        const rel = e.t - barStart(e.m) + (e.m === 0 && pickup ? L - pickup : 0);
+        const slot = e.m * 100 + Math.floor(rel / G + 1e-9);
+        const prev = g && g.evs[g.evs.length - 1];
+        if (ok && g && g.slot === slot && Math.abs(prev.t + prev.d - e.t) < 1e-9) g.evs.push(e);
         else { if (g && g.evs.length > 1) groups.push(g); g = ok ? { slot, evs: [e] } : null; }
       }
       if (g && g.evs.length > 1) groups.push(g);
@@ -187,7 +209,7 @@
       const st = g.evs[0].staff;
       const ds = g.evs.flatMap(e => e.notes.map(T.dia));
       const hi = Math.max(...ds), lo = Math.min(...ds);
-      g.dir = hi - MID[st] > MID[st] - lo ? 'down' : 'up';
+      g.dir = rhythm ? 'up' : hi - MID[st] > MID[st] - lo ? 'down' : 'up';
       for (const e of g.evs) { e.beam = g; e.dir = g.dir; }
     }
 
@@ -197,36 +219,53 @@
       const s = systems[e.sys];
       const yMid = Y(s, e.staff, MID[e.staff]);
       const ds = e.notes.map(T.dia);
-      if (!e.dir) e.dir = (Math.max(...ds) + Math.min(...ds)) / 2 >= MID[e.staff] ? 'down' : 'up';
+      if (!e.dir) e.dir = rhythm ? 'up' : (Math.max(...ds) + Math.min(...ds)) / 2 >= MID[e.staff] ? 'down' : 'up';
       const yHigh = Math.min(...e.ys), yLow = Math.max(...e.ys);
-      if (e.dir === 'up') { e.stemX = e.x + 1.18 - 0.06; e.stemFrom = yLow - 0.168; e.stemTo = Math.min(yHigh - 3.5, yMid); }
-      else { e.stemX = e.x + 0.06; e.stemFrom = yHigh + 0.168; e.stemTo = Math.max(yLow + 3.5, yMid); }
+      const len = e.type === 16 && !e.beam ? 4 : 3.5;
+      if (e.dir === 'up') { e.stemX = e.x + 1.18 - 0.06; e.stemFrom = yLow - 0.168; e.stemTo = Math.min(yHigh - len, yMid); }
+      else { e.stemX = e.x + 0.06; e.stemFrom = yHigh + 0.168; e.stemTo = Math.max(yLow + len, yMid); }
     }
     const beamParts = [];
     for (const g of groups) {
       const a = g.evs[0], z = g.evs[g.evs.length - 1];
       const up = g.dir === 'up';
+      const has16 = g.evs.some(e => e.type === 16);
       const end = e => up ? Math.min(...e.ys) - 3.5 : Math.max(...e.ys) + 3.5;
       const slope = Math.max(-0.12, Math.min(0.12, (end(z) - end(a)) / Math.max(1, z.stemX - a.stemX)));
-      let at = x => end(a) + slope * (x - a.stemX);
-      const need = g.evs.map(e => (up ? Math.min(...e.ys) - 2.8 : Math.max(...e.ys) + 2.8) - at(e.stemX));
+      const base = x => end(a) + slope * (x - a.stemX);
+      const room = has16 ? 3.3 : 2.8;
+      const need = g.evs.map(e => (up ? Math.min(...e.ys) - room : Math.max(...e.ys) + room) - base(e.stemX));
       const shift = up ? Math.min(0, ...need) : Math.max(0, ...need);
-      const base = at; at = x => base(x) + shift;
+      const at = x => base(x) + shift;
       for (const e of g.evs) e.stemTo = at(e.stemX);
-      const xa = a.stemX - 0.06, xb = z.stemX + 0.06, t = up ? 0.5 : -0.5;
-      beamParts.push(`<polygon points="${f(xa)},${f(at(xa))} ${f(xb)},${f(at(xb))} ${f(xb)},${f(at(xb) + t)} ${f(xa)},${f(at(xa) + t)}"/>`);
+      const t = up ? 0.5 : -0.5, inward = up ? 0.75 : -0.75;
+      beamParts.push(poly(a.stemX - 0.06, at(a.stemX - 0.06), z.stemX + 0.06, at(z.stemX + 0.06), t));
+      // second beams: across runs of sixteenths; a lone sixteenth gets a short stub
+      for (let i = 0; i < g.evs.length; i++) {
+        if (g.evs[i].type !== 16) continue;
+        let j = i;
+        while (j + 1 < g.evs.length && g.evs[j + 1].type === 16) j++;
+        let xa, xb;
+        if (j > i) { xa = g.evs[i].stemX - 0.06; xb = g.evs[j].stemX + 0.06; }
+        else if (i === g.evs.length - 1) { xb = g.evs[i].stemX + 0.06; xa = xb - 1.2; }
+        else { xa = g.evs[i].stemX - 0.06; xb = xa + 1.2; }
+        beamParts.push(poly(xa, at(xa) + inward, xb, at(xb) + inward, t));
+        i = j;
+      }
     }
 
     // events
+    let fingerTop = Infinity, fingerBottom = -Infinity;
     for (const e of events) {
       const s = systems[e.sys];
       const g = [];
       if (e.rest) {
         const top = s.tops[e.staff];
         const b = bars[e.m];
-        if (e.d === L && e.t === e.m * L) g.push(use('restWhole', b.x + b.w2 / 2 - 0.56, top + 1));
+        const whole = Math.abs(e.d - (barStart(e.m + 1) - barStart(e.m))) < 1e-9 && e.t === barStart(e.m) && (e.m > 0 || !pickup);
+        if (whole) g.push(use('restWhole', b.x + b.w2 / 2 - 0.56, top + 1));
         else {
-          const glyph = REST[e.type] || 'rest8th';
+          const glyph = REST[e.type];
           g.push(use(glyph, e.x, e.type === 1 ? top + 1 : top + 2));
           if (e.dotted) g.push(use('augmentationDot', e.x + GL[glyph].w + 0.35, top + 1.5));
         }
@@ -235,9 +274,9 @@
       }
       const top = TOP[e.staff], bottom = top - 8;
       const headW = GL[HEAD[e.type]].w;
-      // ledger lines
+      // ledger lines (none on the rhythm line)
       const ledgers = new Map();
-      for (const n of e.notes) {
+      if (!rhythm) for (const n of e.notes) {
         const d = T.dia(n);
         if (d > top) for (let l = top + 2; l <= d; l += 2) ledgers.set(l, (ledgers.get(l) || 0) | (n.right ? 2 : 1));
         if (d < bottom) for (let l = bottom - 2; l >= d; l -= 2) ledgers.set(l, (ledgers.get(l) || 0) | (n.right ? 2 : 1));
@@ -251,7 +290,22 @@
       });
       if (e.stemX !== undefined) {
         g.push(line(e.stemX, e.stemFrom, e.stemX, e.stemTo, 0.12));
-        if (e.type === 8 && !e.beam) g.push(use(e.dir === 'up' ? 'flag8thUp' : 'flag8thDown', e.stemX - 0.06, e.stemTo));
+        if (e.type >= 8 && !e.beam) g.push(use(`flag${e.type === 16 ? '16th' : '8th'}${e.dir === 'up' ? 'Up' : 'Down'}`, e.stemX - 0.06, e.stemTo));
+      }
+      // fingering: right hand above, left hand below; stacked so the top number is the top note
+      if (fingering && e.notes.some(n => n.finger)) {
+        const above = e.voice === 'rh';
+        const order = e.notes.map((n, i) => ({ n, y: e.ys[i] })).sort((p, q) => q.y - p.y); // lowest note first
+        const cx = e.x + headW / 2;
+        if (above) {
+          let y = Math.min(...e.ys, e.dir === 'up' && e.stemTo !== undefined ? e.stemTo : Infinity) - 0.9;
+          if (e.beam && e.dir === 'up') y -= 0.5;
+          for (const { n } of order) { if (n.finger) { g.push(`<text class="finger" x="${f(cx)}" y="${f(y)}" text-anchor="middle">${n.finger}</text>`); fingerTop = Math.min(fingerTop, y - 1.1); } y -= 1.35; }
+        } else {
+          let y = Math.max(...e.ys, e.dir === 'down' && e.stemTo !== undefined ? e.stemTo : -Infinity) + 2.0;
+          if (e.beam && e.dir === 'down') y += 0.5;
+          for (const { n } of [...order].reverse()) { if (n.finger) { g.push(`<text class="finger" x="${f(cx)}" y="${f(y)}" text-anchor="middle">${n.finger}</text>`); fingerBottom = Math.max(fingerBottom, y + 0.4); } y += 1.35; }
+        }
       }
       out.push(`<g class="ev" data-i="${e.i}">${g.join('')}</g>`);
     }
@@ -262,15 +316,19 @@
     for (const b of bars) for (const c of b.cols) marks.push({ t: c.t, sys: b.sys, x: f(c.x + c.acc * 1.2 + 0.6) });
     systems.forEach((s, si) => {
       const lastBar = s.bars[s.bars.length - 1];
-      marks.push({ t: (lastBar.m + 1) * L - 1e-6, sys: si, x: f(s.right - 0.6) });
+      marks.push({ t: barStart(lastBar.m + 1) - 1e-6, sys: si, x: f(s.right - 0.6) });
     });
     marks.sort((a, b) => a.t - b.t);
-    const sysBoxes = systems.map(s => ({ top: f(s.tops[staves[0]] - 2), bottom: f(s.bottom + 2) }));
+    // finger numbers above the first line or below the last must not be cut off
+    const dy = Math.max(0, 0.3 - fingerTop);
+    const total = Math.max(height, fingerBottom + 0.3) + dy;
+    const sysBoxes = systems.map(s => rhythm
+      ? { top: f(s.tops.rhythm - 1.5 + dy), bottom: f(s.tops.rhythm + 5.5 + dy) }
+      : { top: f(s.tops[staves[0]] - 2 + dy), bottom: f(s.bottom + 2 + dy) });
 
-    const W = width;
-    const svg = `<svg class="staff score" viewBox="0 0 ${f(W)} ${f(height)}" role="img" aria-label="${(piece.title || 'Score').replace(/"/g, '')}">` +
-      `<rect class="playhead" x="0" y="0" width="${f(1.6)}" height="0" rx="${f(0.5)}"/>` + out.join('') + '</svg>';
-    return { svg, events, marks, systems: sysBoxes, L, length, bars: nBars, width: f(W), height: f(height), grand };
+    const svg = `<svg class="staff score" viewBox="0 0 ${f(width)} ${f(total)}" role="img" aria-label="${(piece.title || 'Score').replace(/"/g, '')}">` +
+      `<rect class="playhead" x="0" y="0" width="${f(1.6)}" height="0" rx="${f(0.5)}"/><g transform="translate(0 ${f(dy)})">` + out.join('') + '</g></svg>';
+    return { svg, events, marks, systems: sysBoxes, L, pickup, length, bars: nBars, barStart, width: f(width), height: f(total), grand };
   }
 
   self.Score = { layout, parseVoice };

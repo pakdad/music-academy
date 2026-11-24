@@ -14,7 +14,8 @@ It's best with a digital piano connected over MIDI, and works with an on-screen 
 | **Scales** | Play a scale from memory or from the notes (1–2 octaves, up or up-and-down, any starting octave), name a scale from the staff, or recognise major, minor and the modes **by ear** over a drone. |
 | **Progressions** | The first look at a new piece: a 4-bar progression on the grand staff. Name the key (major or its relative minor? the chords decide), then each bar as a Roman numeral, then hear it. Also: recognise a progression by ear, or play one in any key from its numerals. |
 
-| **Pieces** | Short pieces with real rhythm, levels 1–3: traditional and public-domain melodies (Beethoven's Ode to Joy, Au clair de la lune, Hänschen klein, Frère Jacques, Petzold's Minuet in G) and studies written for this site (A minor, a waltz in F, a chord study, a canon). **Wait for me** waits for the right notes; **Play along** counts in, runs the metronome and judges every note for pitch and timing (early/late, in ms); **Listen** plays it with a playhead. Practise one hand while the other plays itself, at any tempo. |
+| **Pieces** | 19 short pieces in three levels with real rhythm: public-domain classics (Beethoven's Ode to Joy and Für Elise, Bach's Prelude in C, Pachelbel's Canon, Haydn's Surprise theme, Dvořák's Largo, Petzold's Minuet in G), traditional tunes, and studies written for this site. **Finger numbers** on request. **Wait for me** waits for the right notes; **Play along** counts in, runs the metronome and judges every note for pitch and timing (early/late, in ms); **Listen** plays it with a playhead. Practise one hand while the other plays itself, at any tempo. Each classic links to its full score on IMSLP. |
+| **Rhythm** | Read a rhythm on a one-line staff and tap it in time (any key, the pad, Space): five levels from whole notes to sixteenths, dotted rhythms, syncopation and rests. Every note is judged early or late; the rhythm figures you miss come back more often. |
 | **Metronome & timing** | A metronome that listens: 2/4 to 6/8, subdivisions, accent, tap tempo, and *silent bars* (the click drops out, you keep going). Every note you play is placed against the beat: how many ms early or late, your average and your spread. *Measure my delay* calibrates the delay of your setup; Play along uses it too. |
 
 Every drill keeps statistics per question (recent accuracy, recent response time). The questions you miss or answer
@@ -68,12 +69,13 @@ it back, to move it between devices.
 Add it to `site/shared/pieces.js`. Each hand is text, bar by bar:
 
 ```js
-rh: 'E4:4 E4 F4 G4 | G4:4. F4:8 E4:2 | C4+E4+G4:1',   // pitch:length; + makes a chord; r is a rest
-lh: 'C3:2 G2 | C3:1 | r:1',                          // 1 2 4 8 = whole … eighth, a dot for dotted
+rh: 'E4@3:4 E4 F4@4 G4@5 | G4:4. F4:8 E4:2 | C4@1+E4@3+G4@5:1',  // pitch@finger:length; + chord; r rest
+lh: 'C3:2 G2 | C3:1 | r:1',                          // 1 2 4 8 16 = whole … sixteenth, a dot for dotted
 ```
 
-The length carries on until the next one is given. `node tools/check.mjs` checks that every bar adds up to the
-time signature, the hands are the same length, and the piece engraves. Only use music that is in the public
+The length carries on until the next one is given. `pickup: 0.5` (in quarter notes) starts with an upbeat; 3/8 and 6/8
+work too. `node tools/check.mjs` checks that every bar adds up to the time signature, the hands are the same length,
+chord fingerings are possible, and the piece engraves. Only use music that is in the public
 domain or that you wrote.
 
 ## Adding a drill

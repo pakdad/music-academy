@@ -28,9 +28,14 @@ self.DRILLS = [
     about: 'The first look at a new piece: find the key, read each bar as a Roman numeral, hear the progression. Or recognise one by ear, or play one in any key.',
   },
   {
+    id: 'rhythm', path: 'drills/rhythm/', instrument: 'any', audience: ['adult'],
+    name: 'Rhythm', icon: '♪♫',
+    about: 'Read a rhythm and tap it in time after a count-in: quarters to sixteenths, dotted notes, syncopation and rests. Every note shows whether it was early or late.',
+  },
+  {
     id: 'pieces', path: 'drills/pieces/', instrument: 'piano', audience: ['adult'], noStats: true,
     name: 'Pieces', icon: '♫',
-    about: 'Short pieces with real rhythm, one or both hands: learn the notes at your pace, then play along with the metronome and see how each note landed.',
+    about: 'Nineteen pieces, from Ode to Joy to Für Elise: learn the notes at your pace (finger numbers on request), then play along with the metronome and see how each note landed.',
   },
   {
     id: 'metronome', path: 'drills/metronome/', instrument: 'any', audience: ['adult'], noStats: true,
