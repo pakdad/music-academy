@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Chord changes</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Chord changes: switch between chords in time. With the metronome: strum once at the start of each bar while the
+// boxes show this chord and the next; each bar is checked by ear. One-minute changes: two chords, sixty seconds,
+// count the clean changes (the microphone counts, or press Space / click for each one).
+(() => {
+  const T = Theory, { h } = UI;
+  const PROGS = [['G', 'C'], ['C', 'Am'], ['D', 'A'], ['Em', 'C'], ['A', 'D', 'E'], ['G', 'D', 'Em', 'C'], ['C', 'Am', 'Dm', 'G7'], ['Am', 'Dm', 'E'], ['E', 'A', 'B7'], ['C', 'G', 'Am', 'F']];
+  const page = UI.page({ drill: 'guitar-changes', title: t('Chord changes'), hud: false, tools: ['mic', 'sound'], keyboard: false, onSettings() {} });
+  const stage = page.el.prompt.parentElement;
+  stage.innerHTML = '';
+  const st = { mode: 'metro', prog: 0, bpm: 60, beats: 4, ...UI.store.get('guitar-changes', {}) };
+  const save = () => UI.store.set('guitar-changes', st);
+  Mic.wantChroma(true);
+  const seg = (options, get, set) => { const el = h('div', { class: 'seg' }); const draw = () => { el.innerHTML = ''; for (const [v, l] of options) el.append(h('button', { class: v === get() ? 'on' : '', onclick: () => { set(v); save(); draw(); stop(); show(); } }, l)); }; draw(); return el; };
+  const progLabel = p => p.map(id => Guitar.chordName(Guitar.chordById(id))).join(' – ');
+  const tempo = h('input', { type: 'range', min: 30, max: 140, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
+  const tempoOut = h('span', { class: 'num' }, `♩ = ${st.bpm}`);
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go() }, '▶ ' + t('Start'));
+  const status = h('div', { class: 'pstatus' });
+  const boxes = h('div', { class: 'changes' });
+  const bars = h('div', { class: 'barlog' });
+  const count = h('div', { class: 'bigcount' });
+  stage.append(
+    h('div', { class: 'controls' },
+      h('div', { class: 'ctl' }, h('span', {}, t('Mode')), seg([['metro', t('With the metronome')], ['minute', t('One-minute changes')]], () => st.mode, v => { st.mode = v; })),
+      h('div', { class: 'ctl' }, h('span', {}, t('Chords')), seg(PROGS.map((p, i) => [i, progLabel(p)]), () => st.prog, v => { st.prog = v; })),
+      h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, tempoOut),
+      h('div', { class: 'ctl' }, h('span', {}, t('Strum')), seg([[4, t('Once per bar')], [1, t('On every beat')]], () => st.beats, v => { st.beats = v; })),
+      h('div', { class: 'ctl go' }, startBtn, status)),
+    boxes, count, bars);
+
+  let run = null;
+  const chords = () => (st.mode === 'minute' ? PROGS[st.prog].slice(0, 2) : PROGS[st.prog]).map(Guitar.chordById);
+  function show(i = 0) {
+    const cs = chords();
+    const cur = cs[i % cs.length], nxt = cs[(i + 1) % cs.length];
+    boxes.innerHTML = '';
+    boxes.append(h('div', { class: 'now' }, h('div', { class: 'muted' }, t('Now')), h('div', { html: Guitar.diagram(cur, { size: 1.3 }) })),
+      h('div', { class: 'next' }, h('div', { class: 'muted' }, t('Next')), h('div', { html: Guitar.diagram(nxt, { size: 0.9 }) })));
+  }
+  show();
+  const best = () => UI.store.get('guitar-changes:best', {});
+  function hearChord(t0, cs) {
+    const chroma = Mic.chromaBetween(t0 + 60, t0 + 480);
+    if (!chroma) return null;
+    const r = Guitar.recognise(chroma, cs);
+    return r.score >= 0.7 ? r.best.id : null;
+  }
+
+  function go() {
+    Sound.unlock();
+    Mic.start();
+    startBtn.textContent = '■ ' + t('Stop');
+    bars.innerHTML = '';
+    count.textContent = '';
+    if (st.mode === 'minute') return goMinute();
+    const cs = chords();
+    const beatsPerChord = 4;
+    const tr = Transport.create({ bpm: st.bpm, onStep: (s, time) => Sound.click(time, s % 4 === 0 ? 2 : 1, s < 4 ? 1 : 0.7) });
+    run = { tr, log: [] };
+    tr.start();
+    let lastBar = -2;
+    const loop = () => {
+      if (!run) return;
+      const b = tr.beatNow() - 4; // one bar to count in
+      if (b < 0) status.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span>`;
+      else {
+        const bar = Math.floor(b / beatsPerChord);
+        status.textContent = t('Bar {n}', { n: bar + 1 });
+        if (bar !== lastBar) {
+          show(bar);
+          // check the previous bar: what sounded in its first beat (or beats)?
+          if (bar > 0) judge(bar - 1);
+          lastBar = bar;
+        }
+      }
+      run.raf = requestAnimationFrame(loop);
+    };
+    function judge(bar) {
+      const want = cs[bar % cs.length];
+      const startMs = run.tr.perfOf(4 + bar * beatsPerChord);
+      const id = hearChord(startMs - 80, cs); // decide between the chords of this progression
+      const ok = id === want.id;
+      run.log.push(ok);
+      bars.append(h('span', { class: 'bar ' + (ok ? 'good' : id ? 'bad' : 'none'), title: id ? Guitar.chordName(Guitar.chordById(id)) : t('nothing heard') }, Guitar.chordName(want)));
+      const clean = run.log.filter(Boolean).length;
+      count.innerHTML = `${clean}/${run.log.length} <small>${t('clean changes')}</small>`;
+    }
+    run.raf = requestAnimationFrame(loop);
+  }
+
+  function goMinute() {
+    const cs = chords();
+    let changes = 0, current = null, t0 = performance.now();
+    run = { minute: true, onsets: [] };
+    show(0);
+    const tick = () => {
+      if (!run) return;
+      const left = 60 - (performance.now() - t0) / 1000;
+      status.textContent = t('{n} s left', { n: Math.ceil(Math.max(0, left)) });
+      if (left <= 0) return finishMinute(changes);
+      run.raf = requestAnimationFrame(tick);
+    };
+    run.add = () => { changes++; count.innerHTML = `${changes} <small>${t('changes')}</small>`; show(changes); };
+    run.strum = time => setTimeout(() => {
+      if (!run || !run.minute) return;
+      const id = hearChord(time, cs);
+      if (id && id !== current) { if (current) run.add(); current = id; }
+    }, 520);
+    count.innerHTML = `0 <small>${t('changes')}</small>`;
+    run.raf = requestAnimationFrame(tick);
+  }
+  function finishMinute(n) {
+    const key = PROGS[st.prog].slice(0, 2).join('-');
+    const b = best();
+    const prev = b[key] || 0;
+    if (n > prev) { b[key] = n; UI.store.set('guitar-changes:best', b); }
+    stop();
+    count.innerHTML = `${n} <small>${t('changes in one minute')}</small>`;
+    status.textContent = n > prev ? t('New best!') : t('Best so far: {n}', { n: prev });
+  }
+  function stop() {
+    if (!run) return;
+    run.tr && run.tr.stop();
+    cancelAnimationFrame(run.raf);
+    run = null;
+    startBtn.textContent = '▶ ' + t('Start');
+  }
+  Mic.on('onset', o => { if (run && run.minute) run.strum(performance.now()); });
+  addEventListener('keydown', e => {
+    if (e.target.closest?.('dialog, input')) return;
+    if (e.code === 'Space') { e.preventDefault(); if (run && run.minute) run.add(); else run ? stop() : go(); }
+  });
+  boxes.addEventListener('click', () => { if (run && run.minute) run.add(); });
+  self.__state = () => ({ run, st });
+})();
+</script>
+</body>
+</html>

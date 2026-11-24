@@ -224,7 +224,7 @@
 
   Input.on(e => { if (e.type === 'on') tap(e.time, e.source === 'screen'); });
   addEventListener('keydown', e => {
-    if (e.target.closest('dialog, input') || e.repeat) return;
+    if (e.target.closest?.('dialog, input') || e.repeat) return;
     if (e.code === 'Space' || e.code === 'KeyJ' || e.code === 'KeyF') { e.preventDefault(); tap(e.timeStamp || performance.now(), true); }
     else if (e.code === 'Enter') { e.preventDefault(); next(); }
     else if (e.code === 'KeyL') { e.preventDefault(); go(true); }

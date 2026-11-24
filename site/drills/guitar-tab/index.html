@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Tab reading</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script src="/shared/gplayer.js"></script>
+<script>
+// Tab reading: short melodies in tab (with the notation above, if you like), new every time. Play them note by note
+// (the page waits), along with the metronome, or listen first. Input: the microphone, or clicks on the fretboard.
+(() => {
+  const T = Theory, { h } = UI;
+  const SCALES = { cmaj: { key: 0, pcs: [0, 2, 4, 5, 7, 9, 11], name: 'C major' }, gmaj: { key: 1, pcs: [7, 9, 11, 0, 2, 4, 6], name: 'G major' },
+    apent: { key: 0, pcs: [9, 0, 2, 4, 7], name: 'A minor pentatonic' }, epent: { key: 1, pcs: [4, 7, 9, 11, 2], name: 'E minor pentatonic' } };
+  const SPEC = [
+    { id: 'strings', label: t('Strings'), type: 'multi', options: [[1, '1 (e)'], [2, '2 (B)'], [3, '3 (G)'], [4, '4 (D)'], [5, '5 (A)'], [6, '6 (E)']] },
+    { id: 'frets', label: t('Frets'), type: 'choice', options: [[3, '0–3'], [5, '0–5'], [7, '0–7'], [12, '0–12']] },
+    { id: 'scale', label: t('Notes from'), type: 'choice', options: Object.entries(SCALES).map(([id, s]) => [id, t(s.name)]) },
+    { id: 'rhythm', label: t('Rhythm'), type: 'choice', options: [[1, t('Quarter notes')], [2, '+ ' + t('Eighths')], [3, '+ ' + t('Dotted rhythms and rests')]] },
+    { id: 'bars', label: t('Length'), type: 'choice', options: [[2, t('{n} bars', { n: 2 })], [4, t('{n} bars', { n: 4 })]] },
+    { id: 'notation', label: t('Notation above the tab'), type: 'choice', options: [[true, t('On')], [false, t('Tab only')]] },
+  ];
+  const DEFAULTS = { strings: [1, 2, 3], frets: 3, scale: 'cmaj', rhythm: 1, bars: 2, notation: true };
+  const page = UI.page({ drill: 'guitar-tab', title: t('Tab reading'), settings: SPEC, defaults: DEFAULTS, hud: false, tools: ['mic', 'sound', 'settings'], keyboard: false, onSettings: () => newPhrase() });
+  const stage = page.el.prompt.parentElement;
+  const st = { mode: 'wait', bpm: 70, metronome: true, ...UI.store.get('guitar-tab:play', {}) };
+  const save = () => UI.store.set('guitar-tab:play', st);
+  const status = h('div', { class: 'pstatus' });
+  const result = h('div', { class: 'presult' });
+  const board = h('div', { class: 'board' });
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, '▶ ' + t('Start'));
+  const tempoOut = h('span', { class: 'num' });
+  const seg = (options, get, set) => { const el = h('div', { class: 'seg' }); const draw = () => { el.innerHTML = ''; for (const [v, l] of options) el.append(h('button', { class: v === get() ? 'on' : '', onclick: () => { set(v); save(); draw(); } }, l)); }; draw(); return el; };
+  const tempo = h('input', { type: 'range', min: 40, max: 160, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
+  tempoOut.textContent = `♩ = ${st.bpm}`;
+  page.el.prompt.replaceWith(h('div', { class: 'controls' },
+    h('div', { class: 'ctl' }, h('span', {}, t('Mode')), seg([['wait', t('Wait for me')], ['play', t('Play along')], ['listen', t('Listen')]], () => st.mode, v => { st.mode = v; stopIt(); })),
+    h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, tempoOut),
+    h('div', { class: 'ctl go' }, startBtn, h('button', { class: 'btn', onclick: () => newPhrase() }, t('New phrase') + ' ›'), status)));
+  page.el.card.classList.add('score-card');
+  page.el.card.after(board);
+  board.after(result);
+  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.textContent = '▶ ' + t('Start'); } });
+
+  function phrase(S) {
+    const sc = SCALES[S.scale];
+    const pos = [];
+    for (const s of S.strings) for (let f = 0; f <= S.frets; f++) { const m = Guitar.midi(s, f); if (sc.pcs.includes(T.mod(m, 12))) pos.push({ s, f, m }); }
+    // one place per pitch: the lowest fret
+    const byM = new Map();
+    for (const p of pos) if (!byM.has(p.m) || byM.get(p.m).f > p.f) byM.set(p.m, p);
+    const notes = [...byM.values()].sort((a, b) => a.m - b.m);
+    if (!notes.length) return null;
+    let i = Math.floor(notes.length / 2);
+    const step = () => { i = Math.max(0, Math.min(notes.length - 1, i + UI.rand([-2, -1, -1, 1, 1, 2, 0]))); return notes[i]; };
+    const tok = (p, code) => `${T.name(T.spell(p.m + 12, sc.key), { ascii: true, octave: true })}^${p.s}.${p.f}:${code}`;
+    const bars = [];
+    for (let b = 0; b < S.bars; b++) {
+      const out = [];
+      let beat = 0;
+      while (beat < 4) {
+        const last = b === S.bars - 1 && beat >= 2;
+        const r = Math.random();
+        if (last && beat === 2) { out.push(tok(step(), '2')); beat += 2; continue; }
+        if (S.rhythm >= 3 && beat % 2 === 0 && r < 0.2) { out.push(tok(step(), '4.'), tok(step(), '8')); beat += 2; continue; }
+        if (S.rhythm >= 3 && r < 0.3 && beat > 0) { out.push('r:4'); beat += 1; continue; }
+        if (S.rhythm >= 2 && r < 0.55) { out.push(tok(step(), '8'), tok(step(), '8')); beat += 1; continue; }
+        out.push(tok(step(), '4')); beat += 1;
+      }
+      bars.push(out.join(' '));
+    }
+    return { clef: 'guitar', tab: true, notation: S.notation, key: sc.key, time: [4, 4], tempo: st.bpm, rh: bars.join(' | '), title: t('Tab reading') };
+  }
+  function newPhrase() {
+    stopIt();
+    const S = page.settings;
+    const p = phrase(S);
+    if (!p) { page.el.card.innerHTML = `<p class="muted">${t('No notes of this scale on these strings and frets: choose more.')}</p>`; return; }
+    player.load(p);
+    result.innerHTML = '';
+    status.textContent = '';
+    Guitar.fretboard(board, { frets: Math.max(5, S.frets), onPick });
+  }
+  function go() {
+    startBtn.textContent = '■ ' + t('Stop');
+    if (st.mode !== 'listen') Mic.start();
+    player.start(st.mode, { bpm: st.bpm, metronome: st.metronome });
+  }
+  function stopIt() { player.stop(); startBtn.textContent = '▶ ' + t('Start'); }
+  function feedback(r, m) {
+    if (r === 'bad') page.flash(false, t('Not that one: you played {note}.', { note: UI.noteName(T.spell(m, 0), { octave: true }) }));
+    else page.clearFlash();
+  }
+  function onPick(s, f) {
+    const m = Guitar.midi(s, f);
+    Sound.pluck(m, { dur: 1 });
+    if (player.running) feedback(player.input(m, performance.now()), m);
+  }
+  Mic.on('note', n => { if (player.running && player.mode !== 'listen') feedback(player.input(n.midi, n.time), n.midi); });
+  addEventListener('keydown', e => { if (e.code === 'Space' && !e.target.closest?.('dialog, input')) { e.preventDefault(); player.running ? stopIt() : go(); } });
+  self.__state = () => ({ player, st });
+  newPhrase();
+})();
+</script>
+</body>
+</html>

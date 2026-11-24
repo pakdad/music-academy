@@ -229,3 +229,85 @@ table.stats td.bad { color: var(--bad); }
 input.text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
 ul.report { margin: 4px 0 12px; padding-left: 18px; font-size: 14px; }
 .score-card.preview { max-height: 260px; overflow: hidden; padding: 4px 8px; }
+
+/* ---------- guitar ---------- */
+:root { --wood: #f4ece2; --fretwire: #a8a29a; --string: #8d877f; }
+@media (prefers-color-scheme: dark) { :root { --wood: #221d19; --fretwire: #5c5650; --string: #8d877f; } }
+:root[data-theme="mono"] { --wood: #ffffff; --fretwire: #9a9a9a; --string: #777777; }
+@media (prefers-color-scheme: dark) { :root[data-theme="mono"] { --wood: #000000; --fretwire: #555555; --string: #888888; } }
+.board { width: 100%; max-width: 1000px; overflow-x: auto; }
+.fretboard { display: block; width: 100%; min-width: 420px; margin: 0 auto; height: auto; background: var(--wood); border-radius: 10px; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.fretboard .fret { stroke: var(--fretwire); stroke-width: 2; }
+.fretboard .nut { stroke: var(--ink); stroke-width: 6; }
+.fretboard .string { stroke: var(--string); }
+.fretboard .inlay { fill: var(--line); }
+.fretboard .fretno { font: 11px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+.fretboard .hit { fill: transparent; cursor: pointer; }
+.fretboard .hit:hover { fill: var(--accent-soft); }
+.fretboard .mark { pointer-events: none; }
+.fretboard .mark circle { fill: var(--accent); }
+.fretboard .mark text { font: 700 12px ui-sans-serif, system-ui, sans-serif; fill: var(--on-accent); }
+.fretboard .mark.good circle { fill: var(--good); }
+.fretboard .mark.bad circle { fill: var(--bad); }
+.fretboard .mark.hint circle { fill: var(--warn); }
+.fretboard .mark.soft circle { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; }
+.fretboard .mark.soft text { fill: var(--ink); font-weight: 600; }
+.diagram { display: block; height: auto; max-width: 100%; margin: 0 auto; }
+.diagram .fret, .diagram .string { stroke: var(--ink); stroke-width: 1.2; }
+.diagram .nut { stroke: var(--ink); stroke-width: 5; }
+.diagram .dot { fill: var(--accent); }
+.diagram .dfinger { font: 700 11px ui-sans-serif, system-ui, sans-serif; fill: var(--on-accent); }
+.diagram .dopen { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.diagram .dmute { font: 16px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+.diagram .dname { font: 700 15px ui-sans-serif, system-ui, sans-serif; fill: var(--ink); }
+.diagram .dbase { font: 12px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+.score .tabclef { font: 700 16px Georgia, serif; fill: currentColor; }
+.score .tabnum { font: 700 14px ui-sans-serif, system-ui, sans-serif; fill: currentColor; }
+.score .tabbg { fill: var(--paper); }
+.score .elabel { font: 700 15px ui-sans-serif, system-ui, sans-serif; fill: var(--accent); }
+.btn.small { padding: 6px 12px; font-size: 14px; }
+.levels { margin-bottom: -4px; }
+.micbtn[data-state="ready"] .dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, .2); animation: kit-pulse 1.6s infinite; }
+@keyframes kit-pulse { 50% { opacity: .5; } }
+
+/* tuner */
+.tuner { width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px; transition: box-shadow .2s; }
+.tuner.intune { box-shadow: 0 0 0 3px var(--good), var(--shadow); }
+.tuner-note { font-size: 72px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.tuner-note small { font-size: 26px; color: var(--muted); font-weight: 600; }
+.tuner-hz { font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.tuner-gauge svg { width: min(360px, 90vw); height: auto; display: block; }
+.tuner-gauge .arc { fill: none; stroke: var(--line); stroke-width: 10; stroke-linecap: round; }
+.tuner-gauge .arc-good { fill: none; stroke: var(--good); stroke-width: 10; }
+.tuner-gauge .tick { stroke: var(--muted); stroke-width: 2; }
+.tuner-gauge .ticklabel { font: 11px ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+.tuner-gauge .needle { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; transition: transform .12s; }
+.tuner-gauge circle { fill: var(--accent); }
+.tuner-msg { font-size: 18px; font-weight: 650; text-align: center; min-height: 1.5em; }
+.tuner.intune .tuner-msg { color: var(--good); }
+.tuner-strings { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.tstring { display: flex; flex-direction: column; align-items: center; min-width: 54px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); cursor: pointer; }
+.tstring b { font-size: 20px; }
+.tstring small { color: var(--muted); font-size: 11px; }
+.tstring.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.tstring.hit { background: var(--accent-soft); }
+.tuner-settings { width: 100%; max-width: 560px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+input.a4 { width: 80px; }
+
+/* strumming */
+.arrows { display: flex; gap: 8px; justify-content: center; font-size: 40px; font-weight: 700; line-height: 1; }
+.arrows span { width: 1.2em; text-align: center; border-radius: 10px; color: var(--ink); padding: 4px 0; }
+.arrows span.gap { color: var(--line); }
+.arrows span.on { background: var(--accent-soft); color: var(--accent); }
+
+/* chord changes */
+.changes { display: flex; gap: 40px; align-items: flex-end; justify-content: center; flex-wrap: wrap; }
+.changes .now, .changes .next { text-align: center; }
+.changes .next { opacity: .7; }
+.bigcount { font-size: 44px; font-weight: 800; text-align: center; color: var(--accent); }
+.bigcount small { font-size: 16px; color: var(--muted); font-weight: 500; }
+.barlog { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 900px; }
+.barlog .bar { padding: 4px 10px; border-radius: 8px; font-weight: 650; font-size: 14px; border: 1px solid var(--line); }
+.barlog .bar.good { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.barlog .bar.bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+.barlog .bar.none { color: var(--muted); }

@@ -50,4 +50,52 @@ self.DRILLS = [
     about: 'A metronome that listens: see how early or late each note is, train your inner pulse with silent bars, and measure your setup\'s delay.',
     de: { name: "Metronom & Timing", about: "Ein Metronom, das zuhört: Wie früh oder spät ist jede Note? Den inneren Puls mit stillen Takten trainieren und die Verzögerung des eigenen Geräts messen." },
   },
+  {
+    id: 'guitar-tuner', path: 'drills/guitar-tuner/', instrument: 'guitar', audience: ['adult'],
+    name: "Tuner", icon: "Hz",
+    about: "Tune your guitar with the microphone: a needle shows how many cents each string is off. Standard and five other tunings, reference tones, A4 adjustable.",
+    de: { name: "Stimmgerät", about: "Stimme deine Gitarre mit dem Mikrofon: eine Nadel zeigt, wie viele Cent jede Saite daneben liegt. Standard und fünf weitere Stimmungen, Referenztöne, A4 einstellbar." },
+  },
+  {
+    id: 'guitar-fretboard', path: 'drills/guitar-fretboard/', instrument: 'guitar', audience: ['adult'],
+    name: "Fretboard", icon: "0–12",
+    about: "Learn where the notes are: find every G on the neck, name a marked position, or explore and listen. Works with the mouse alone.",
+    de: { name: "Griffbrett", about: "Lerne, wo die Töne liegen: finde jedes G auf dem Hals, benenne eine markierte Stelle oder erkunde und höre. Geht auch nur mit der Maus." },
+  },
+  {
+    id: 'guitar-notes', path: 'drills/guitar-notes/', instrument: 'guitar', audience: ['adult'],
+    name: "Note reading", icon: "♩",
+    about: "A note as notation, tab and position on the neck: switch each on or off as you get better. Play it (microphone), click it on the fretboard, or name it.",
+    de: { name: "Notenlesen", about: "Eine Note als Notenschrift, Tabulatur und Lage auf dem Griffbrett: schalte jedes einzeln ab, wenn du besser wirst. Spiele sie (Mikrofon), klicke sie auf dem Griffbrett oder benenne sie." },
+  },
+  {
+    id: 'guitar-tab', path: 'drills/guitar-tab/', instrument: 'guitar', audience: ['adult'],
+    name: "Tab reading", icon: "TAB",
+    about: "New tab melodies every time, with the notation above if you like: play note by note, along with the metronome, or listen first.",
+    de: { name: "Tabulatur lesen", about: "Jedes Mal neue Tabulatur-Melodien, auf Wunsch mit Noten darüber: Note für Note spielen, mit dem Metronom mitspielen oder erst anhören." },
+  },
+  {
+    id: 'guitar-chords', path: 'drills/guitar-chords/', instrument: 'guitar', audience: ['adult'],
+    name: "Chords", icon: "Am",
+    about: "Open, seventh, sus, power and barre chords: play the chord and the microphone checks it, name a chord box, or build the shape on the fretboard.",
+    de: { name: "Akkorde", about: "Offene, Sept-, Sus-, Power- und Barréakkorde: spiele den Akkord und das Mikrofon prüft ihn, benenne ein Akkorddiagramm oder baue den Griff auf dem Griffbrett." },
+  },
+  {
+    id: 'guitar-changes', path: 'drills/guitar-changes/', instrument: 'guitar', audience: ['adult'],
+    name: "Chord changes", icon: "G→C",
+    about: "Change chords in time with the metronome, with the next chord always in view, or count your clean changes in one minute.",
+    de: { name: "Akkordwechsel", about: "Wechsle Akkorde im Takt mit dem Metronom, der nächste Akkord immer im Blick, oder zähle deine sauberen Wechsel in einer Minute." },
+  },
+  {
+    id: 'guitar-strumming', path: 'drills/guitar-strumming/', instrument: 'guitar', audience: ['adult'],
+    name: "Strumming", icon: "↓↑",
+    about: "Strumming patterns from all-downs to the folk strum, offbeats and 6/8: listen, then strum along; every strum is checked for timing.",
+    de: { name: "Schlagmuster", about: "Schlagmuster von nur Abschlägen bis zum Folk-Rhythmus, Offbeats und 6/8: anhören, dann mitschlagen; jeder Schlag wird auf Timing geprüft." },
+  },
+  {
+    id: 'guitar-picking', path: 'drills/guitar-picking/', instrument: 'guitar', audience: ['adult'],
+    name: "Picking", icon: "pima",
+    about: "Fingerpicking patterns over chord progressions in notation and tab, with the right-hand fingers marked: wait for me, play along or listen.",
+    de: { name: "Zupfmuster", about: "Zupfmuster über Akkordfolgen in Noten und Tabulatur, mit den Fingern der rechten Hand: warte auf mich, mitspielen oder anhören." },
+  },
 ];

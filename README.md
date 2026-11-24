@@ -18,6 +18,25 @@ It's best with a digital piano connected over MIDI, and works with an on-screen 
 | **Rhythm** | Read a rhythm on a one-line staff and tap it in time (any key, the pad, Space): five levels from whole notes to sixteenths, dotted rhythms, syncopation and rests. Every note is judged early or late; the rhythm figures you miss come back more often. |
 | **Metronome & timing** | A metronome that listens: 2/4 to 6/8, subdivisions, accent, tap tempo, and *silent bars* (the click drops out, you keep going). Every note you play is placed against the beat: how many ms early or late, your average and your spread. *Measure my delay* calibrates the delay of your setup; Play along uses it too. |
 
+### Guitar
+
+The guitar course listens through the **microphone** (pitch detection with YIN, note onsets, and the pitch classes
+of a strummed chord, all in the browser), and most drills also work with the **mouse** on a clickable fretboard.
+
+| Drill | What it trains |
+| --- | --- |
+| **Tuner** | A cents needle and the nearest string; standard, half-step down, drop D, DADGAD, open G and open D; reference tones; A4 430–450 Hz. |
+| **Fretboard** | Find every G on the neck, name a marked position, or explore and listen. Mouse only, if you like. |
+| **Note reading** | A note as notation (treble clef with the 8: guitar sounds an octave lower), as tab, and as a position on the neck; switch each on or off (Beginner / Intermediate / Advanced). Play it, click it, or name it. |
+| **Tab reading** | New melodies each time in tab, with or without notation; strings, frets, scale and rhythm to choose. Wait for me, play along, listen. |
+| **Chords** | 34 shapes (open, seventh, sus, power, barre). Play the chord (recognised from its sound, with each string's overtones taken into account), name a chord box, or build the shape on the fretboard. |
+| **Chord changes** | Change in time with the metronome (this chord and the next in view, every bar checked), or count clean changes in one minute. |
+| **Strumming** | Nine patterns with ↓ ↑, 4/4, 3/4 and 6/8; listen on a chord, then strum along; every strum is timed. |
+| **Picking** | Fingerpicking patterns (p i m a, pinch, alternating bass) over chord progressions, in notation and tab. |
+
+Guitar settings on the home page: tuning, capo, left-handed fretboard. The metronome can listen with the microphone,
+and *Measure my delay* calibrates the microphone separately from MIDI.
+
 Every drill keeps statistics per question (recent accuracy, recent response time). The questions you miss or answer
 slowly come up more often, and **📊** shows your weak spots. Note names are English (B, B♭) or German (H, B).
 

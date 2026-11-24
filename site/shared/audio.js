@@ -102,5 +102,52 @@
     return performance.now() + (audioTime - c.currentTime + (c.outputLatency || c.baseLatency || 0)) * 1000;
   }
 
-  self.Sound = { enabled: true, feedback: true, note, chord, sequence, tick, click, perfAt, context: () => audio(), unlock: () => audio() };
+  // a plucked string (Karplus–Strong): a burst of noise in a short delay line, averaged as it loops
+  const plucks = new Map();
+  function pluckBuffer(m) {
+    if (plucks.has(m)) return plucks.get(m);
+    const c = audio(), sr = c.sampleRate, f = hz(m);
+    const N = Math.max(2, Math.round(sr / f - 0.5));
+    const len = Math.round(sr * 3);
+    const buf = c.createBuffer(1, len, sr), out = buf.getChannelData(0);
+    const ring = new Float32Array(N);
+    let prev = 0;
+    for (let i = 0; i < N; i++) { const r = Math.random() * 2 - 1; prev = prev * 0.5 + r * 0.5; ring[i] = prev; } // a softer pick
+    const damp = 0.9965 + Math.min(0.003, 40 / f / 1000);
+    let idx = 0, peak = 0;
+    for (let i = 0; i < len; i++) {
+      const a = ring[idx], b = ring[(idx + 1) % N];
+      out[i] = a;
+      ring[idx] = damp * 0.5 * (a + b);
+      idx = (idx + 1) % N;
+      peak = Math.max(peak, Math.abs(a));
+    }
+    for (let i = 0; i < len; i++) out[i] /= peak || 1;
+    const entry = { buf, rate: f / (sr / (N + 0.5)) }; // the loop sounds at sr / (N + ½): correct the pitch
+    plucks.set(m, entry);
+    return entry;
+  }
+  function pluck(m, { at = 0, when = null, dur = 2, vel = 0.7 } = {}) {
+    if (!Sound.enabled) return;
+    const c = audio();
+    const t = when ?? c.currentTime + 0.02 + at;
+    const { buf, rate } = pluckBuffer(m);
+    const src = c.createBufferSource(), g = c.createGain();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    g.gain.setValueAtTime(vel * 0.55, t);
+    g.gain.setTargetAtTime(0.0001, t + dur, 0.06);
+    src.connect(g).connect(master);
+    src.start(t);
+    src.stop(t + dur + 0.5);
+  }
+  // a strum: the strings one after another, low to high (down) or high to low (up)
+  function strum(ms, { at = 0, when = null, dir = 'down', spread = 0.012, dur = 1.6, vel = 0.65 } = {}) {
+    const order = [...ms].sort((a, b) => dir === 'down' ? a - b : b - a);
+    const c = audio();
+    const t = when ?? c.currentTime + 0.02 + at;
+    order.forEach((m, i) => pluck(m, { when: t + i * spread, dur, vel: vel * (dir === 'up' ? 0.8 : 1) }));
+  }
+
+  self.Sound = { enabled: true, feedback: true, note, chord, sequence, tick, click, pluck, strum, perfAt, context: () => audio(), unlock: () => audio() };
 })();

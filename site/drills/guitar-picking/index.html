@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Picking</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script src="/shared/gplayer.js"></script>
+<script>
+// Picking: fingerpicking patterns over chords, written as notation and tab with the right-hand fingers on top
+// (p thumb, i index, m middle, a ring). Hold the chord, pick the pattern. Wait for me, play along, or listen.
+(() => {
+  const T = Theory, { h } = UI;
+  const PROGS = [{ ids: ['C', 'Am', 'Dm', 'G'], key: 0 }, { ids: ['Am', 'Em', 'Am', 'E'], key: 0 }, { ids: ['G', 'C', 'D', 'G'], key: 1 },
+    { ids: ['Em', 'C', 'G', 'D'], key: 1 }, { ids: ['A', 'D', 'E', 'A'], key: 3 }, { ids: ['C', 'G', 'Am', 'F'], key: 0 }];
+  const page = UI.page({ drill: 'guitar-picking', title: t('Picking'), hud: false, tools: ['mic', 'sound'], keyboard: false, onSettings() {} });
+  const stage = page.el.prompt.parentElement;
+  const st = { pattern: 'pima', prog: 0, mode: 'listen', bpm: 60, notation: true, ...UI.store.get('guitar-picking', {}) };
+  const save = () => UI.store.set('guitar-picking', st);
+  const seg = (options, get, set) => { const el = h('div', { class: 'seg' }); const draw = () => { el.innerHTML = ''; for (const [v, l] of options) el.append(h('button', { class: v === get() ? 'on' : '', onclick: () => { set(v); save(); draw(); load(); } }, l)); }; draw(); return el; };
+  const tempo = h('input', { type: 'range', min: 40, max: 140, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
+  const tempoOut = h('span', { class: 'num' }, `♩ = ${st.bpm}`);
+  const status = h('div', { class: 'pstatus' });
+  const result = h('div', { class: 'presult' });
+  const board = h('div', { class: 'board' });
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => player.running ? stopIt() : go() }, '▶ ' + t('Start'));
+  const progLabel = p => p.ids.map(id => Guitar.chordName(Guitar.chordById(id))).join(' – ');
+  page.el.prompt.replaceWith(h('div', { class: 'controls' },
+    h('div', { class: 'ctl' }, h('span', {}, t('Pattern')), seg(Guitar.PICKS.map(p => [p.id, t(p.name)]), () => st.pattern, v => { st.pattern = v; })),
+    h('div', { class: 'ctl' }, h('span', {}, t('Chords')), seg(PROGS.map((p, i) => [i, progLabel(p)]), () => st.prog, v => { st.prog = v; })),
+    h('div', { class: 'ctl' }, h('span', {}, t('Mode')), seg([['wait', t('Wait for me')], ['play', t('Play along')], ['listen', t('Listen')]], () => st.mode, v => { st.mode = v; })),
+    h('div', { class: 'ctl' }, h('span', {}, t('Notation above the tab')), seg([[true, t('On')], [false, t('Tab only')]], () => st.notation, v => { st.notation = v; })),
+    h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, tempoOut),
+    h('div', { class: 'ctl go' }, startBtn, status)));
+  page.el.card.classList.add('score-card');
+  page.el.card.after(board);
+  board.after(result);
+  const player = GPlayer.create({ card: page.el.card, status, result, onFinish: () => { startBtn.textContent = '▶ ' + t('Start'); } });
+
+  function build() {
+    const pat = Guitar.PICKS.find(p => p.id === st.pattern) || Guitar.PICKS[0];
+    const prog = PROGS[st.prog] || PROGS[0];
+    const bars = prog.ids.map(id => {
+      const shape = Guitar.chordById(id);
+      return pat.slots.map(([code, finger], i) => {
+        const notes = Guitar.pickStrings(shape, code).map(s => {
+          const fret = shape.frets[6 - s];
+          const m = Guitar.midi(s, Math.max(0, fret));
+          return `${T.name(T.spell(m + 12, prog.key), { ascii: true, octave: true })}^${s}.${Math.max(0, fret)}`;
+        });
+        const label = i === 0 ? Guitar.chordName(shape).replace(/\s/g, '') : finger;
+        return `${notes.join('+')}:8=${label}`;
+      }).join(' ');
+    });
+    return { clef: 'guitar', tab: true, notation: st.notation, key: prog.key, time: pat.time, rh: bars.join(' | '), title: t('Picking') };
+  }
+  function load() {
+    stopIt();
+    player.load(build());
+    result.innerHTML = '';
+    status.textContent = t('Hold each chord for the whole bar; p = thumb, i = index, m = middle, a = ring finger.');
+    Guitar.fretboard(board, { frets: 5, onPick });
+  }
+  function go() {
+    startBtn.textContent = '■ ' + t('Stop');
+    if (st.mode !== 'listen') Mic.start();
+    player.start(st.mode, { bpm: st.bpm });
+  }
+  function stopIt() { player.stop(); startBtn.textContent = '▶ ' + t('Start'); }
+  function onPick(s, f) { const m = Guitar.midi(s, f); Sound.pluck(m, { dur: 1 }); if (player.running) player.input(m, performance.now()); }
+  Mic.on('note', n => { if (player.running && player.mode !== 'listen') player.input(n.midi, n.time); });
+  addEventListener('keydown', e => { if (e.code === 'Space' && !e.target.closest?.('dialog, input')) { e.preventDefault(); player.running ? stopIt() : go(); } });
+  self.__state = () => ({ player, st });
+  load();
+})();
+</script>
+</body>
+</html>

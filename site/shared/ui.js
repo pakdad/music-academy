@@ -173,10 +173,17 @@
     const kbBtn = h('button', { class: 'icon', title: t('On-screen keyboard'), onclick: () => setPref('keyboard', !prefs.keyboard) }, '🎹');
     const statsBtn = h('button', { class: 'icon', title: t('Weak spots'), onclick: () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)) }, '📊');
     const setBtn = h('button', { class: 'icon', title: t('Settings'), onclick: () => openSettings() }, '⚙️');
+    // the microphone (guitar pages): shows whether we listen, and turns it on or off
+    const micBtn = h('button', { class: 'midi micbtn', title: t('Microphone'), onclick: () => self.Mic && (Mic.state === 'on' ? Mic.stop() : Mic.start()) },
+      h('span', { class: 'dot' }), h('span', { class: 'midi-text' }, '🎤'));
+    if (self.Mic) Mic.on('state', st => {
+      micBtn.dataset.state = st === 'on' ? 'ready' : st === 'denied' || st === 'unsupported' ? 'denied' : 'none';
+      micBtn.querySelector('.midi-text').textContent = '🎤 ' + ({ on: t('Listening'), asking: '…', denied: t('Microphone blocked'), unsupported: t('No microphone') }[st] || t('Microphone off'));
+    });
     const bar = h('header', { class: 'bar' },
       h('a', { class: 'home', href: '/', title: ED.name || t('Home') }, '‹'),
       h('h1', {}, t(title)), opts.hud === false ? null : hud,
-      h('div', { class: 'tools' }, ...Object.entries({ midi: midiDot, sound: soundBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
+      h('div', { class: 'tools' }, ...Object.entries({ mic: micBtn, midi: midiDot, sound: soundBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
         .filter(([id]) => (opts.tools || ['midi', 'sound', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
     const prompt = h('div', { class: 'prompt' });
     const card = h('div', { class: 'card' });
@@ -193,7 +200,7 @@
         : state === 'denied' ? t('MIDI access was refused') : 'MIDI';
       midiDot.querySelector('.midi-text').textContent = state === 'ready' ? devices[0] : 'MIDI';
     });
-    Input.init();
+    if ((opts.tools || ['midi']).includes('midi')) Input.init();
     function showMidiHelp() {
       const s = Input.state;
       const msg = {
@@ -236,7 +243,7 @@
     // number keys pick a multiple-choice answer
     let choiceHandler = null;
     addEventListener('keydown', e => {
-      if (e.target.closest('dialog, input')) return;
+      if (e.target.closest?.('dialog, input')) return;
       if (choiceHandler && /^[1-9]$/.test(e.key)) choiceHandler(+e.key - 1);
       if (opts.onKey) opts.onKey(e);
     });

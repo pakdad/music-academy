@@ -263,7 +263,7 @@
   }
 
   // Enter / space = next, when a round is finished
-  addEventListener('keydown', e => { if (wait && (e.key === 'Enter' || e.key === ' ') && !e.target.closest('dialog')) { e.preventDefault(); next(); } });
+  addEventListener('keydown', e => { if (wait && (e.key === 'Enter' || e.key === ' ') && !e.target.closest?.('dialog')) { e.preventDefault(); next(); } });
 
   self.__state = () => q; // for the end-to-end test
   start();

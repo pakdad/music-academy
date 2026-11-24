@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Fretboard</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Fretboard: learn where the notes are. Explore (click to hear and see), find every place of a note,
+// or name a marked position (buttons, or play it). Works with the mouse alone.
+(() => {
+  const T = Theory, { h } = UI;
+  const SPEC = [
+    { id: 'mode', label: t('Drill'), type: 'choice', options: [['find', t('Find every note')], ['name', t('Name the position')], ['explore', t('Explore')]] },
+    { id: 'frets', label: t('Frets'), type: 'choice', options: [[5, '0–5'], [7, '0–7'], [12, '0–12']] },
+    { id: 'acc', label: t('Notes'), type: 'choice', options: [['nat', t('Naturals (no ♯/♭)')], ['all', t('All twelve')]] },
+    { id: 'names', label: t('Show note names on the neck'), type: 'choice', options: [[false, t('Off')], [true, t('On')]], show: s => s.mode === 'explore' },
+  ];
+  const DEFAULTS = { mode: 'find', frets: 5, acc: 'nat', names: true };
+  const page = UI.page({ drill: 'guitar-fretboard', title: t('Fretboard'), settings: SPEC, defaults: DEFAULTS, tools: ['mic', 'sound', 'stats', 'settings'], keyboard: false,
+    describe: k => k.startsWith('pc:') ? t('Find every {note}', { note: UI.noteName(T.spell(+k.slice(3) + 60, 0)) }) : t('String {s}, fret {f}', { s: k.split('.')[0], f: k.split('.')[1] }),
+    onSettings: () => start() });
+  const board = h('div', { class: 'board' });
+  page.el.answers.before(board);
+  let S, q = null, wait = false;
+  const NAT = [0, 2, 4, 5, 7, 9, 11];
+  const nameOf = (m) => UI.noteName(T.spell(m, 0));
+  const sharpOrFlat = pc => [1, 3, 6, 8, 10].includes(pc) ? `${UI.noteName(T.spell(pc + 60, 3))}/${UI.noteName(T.spell(pc + 60, -3))}` : UI.noteName(T.spell(pc + 60, 0));
+
+  function start() { S = page.settings; page.clearFlash(); page.clearChoices(); next(); }
+
+  function next() {
+    wait = false;
+    page.clearFlash();
+    page.clearChoices();
+    page.el.card.innerHTML = '';
+    if (S.mode === 'explore') return explore();
+    if (S.mode === 'find') {
+      const pcs = (S.acc === 'nat' ? NAT : [...Array(12).keys()]).map(p => 'pc:' + p);
+      const item = page.pick(pcs, { target: 8000, avoid: q ? [q.item] : [] });
+      const pc = +item.slice(3);
+      const all = [];
+      for (let s = 1; s <= 6; s++) for (let f = 0; f <= S.frets; f++) if (T.mod(Guitar.midi(s, f), 12) === pc) all.push({ string: s, fret: f });
+      q = { item, pc, all, found: [], wrong: [], missed: false };
+      page.el.prompt.innerHTML = t('Find every <b>{note}</b>', { note: sharpOrFlat(pc) }) + `<small>${t('frets 0–{n}: {count} places', { n: S.frets, count: all.length })}</small>`;
+      drawFind();
+      page.ask(item);
+    } else {
+      const items = [];
+      for (let s = 1; s <= 6; s++) for (let f = 0; f <= S.frets; f++) if (S.acc === 'all' || NAT.includes(T.mod(Guitar.midi(s, f), 12))) items.push(`${s}.${f}`);
+      const item = page.pick(items, { target: 2500, avoid: q ? [q.item] : [] });
+      const [s, f] = item.split('.').map(Number);
+      q = { item, s, f, m: Guitar.midi(s, f), missed: false };
+      page.el.prompt.innerHTML = t('Which note is this?') + `<small>${t('Tap the name, or play it')}</small>`;
+      Guitar.fretboard(board, { frets: S.frets, marks: [{ string: s, fret: f, cls: 'cur' }] });
+      const opts = (S.acc === 'nat' ? NAT : [...Array(12).keys()]).map(pc => ({ label: sharpOrFlat(pc), value: pc }));
+      page.choices(opts, (pc, btn) => nameAnswer(pc === T.mod(q.m, 12), btn), { columns: Math.min(7, opts.length) });
+      page.ask(item);
+    }
+  }
+
+  function drawFind() {
+    const marks = q.found.map(p => ({ ...p, cls: 'good', label: nameOf(Guitar.midi(p.string, p.fret)) }))
+      .concat(q.wrong.map(p => ({ ...p, cls: 'bad', label: nameOf(Guitar.midi(p.string, p.fret)) })));
+    Guitar.fretboard(board, { frets: S.frets, marks, onPick: (s, f) => findPick(s, f) });
+  }
+  function findPick(s, f) {
+    if (wait || S.mode !== 'find') return;
+    const m = Guitar.midi(s, f);
+    Sound.pluck(m, { dur: 1.2 });
+    if (q.found.some(p => p.string === s && p.fret === f)) return;
+    if (T.mod(m, 12) === q.pc) {
+      q.found.push({ string: s, fret: f });
+      if (q.found.length === q.all.length) {
+        if (!q.missed) page.answer(true); else page.answer(false);
+        wait = true;
+        page.flash(!q.missed, q.missed ? t('All found, with {n} wrong taps.', { n: q.wrong.length }) : t('All {n} found!', { n: q.all.length }));
+        setTimeout(next, 1300);
+      }
+    } else {
+      q.wrong.push({ string: s, fret: f });
+      q.missed = true;
+      page.flash(false, t('That\'s {note}.', { note: nameOf(m) }));
+      setTimeout(() => { q.wrong = q.wrong.filter(p => !(p.string === s && p.fret === f)); drawFind(); }, 900);
+    }
+    drawFind();
+  }
+
+  function nameAnswer(ok, btn) {
+    if (wait) return;
+    if (ok) {
+      btn && btn.classList.add('right');
+      if (!q.missed) page.answer(true);
+      wait = true;
+      Sound.pluck(q.m, { dur: 1.2 });
+      page.flash(true, nameOf(q.m));
+      setTimeout(next, 700);
+    } else {
+      btn && btn.classList.add('wrong');
+      if (!q.missed) page.answer(false);
+      q.missed = true;
+      page.flash(false, t('It\'s <b>{note}</b>.', { note: nameOf(q.m) }));
+    }
+  }
+  Mic.on('note', n => { if (S && S.mode === 'name' && q && !wait) nameAnswer(T.mod(n.midi, 12) === T.mod(q.m, 12)); });
+
+  function explore() {
+    q = null;
+    page.el.prompt.innerHTML = t('Click any place to hear it and see its name');
+    const marks = [];
+    if (S.names) for (let s = 1; s <= 6; s++) for (let f = 0; f <= S.frets; f++) {
+      const m = Guitar.midi(s, f);
+      if (S.acc === 'all' || NAT.includes(T.mod(m, 12))) marks.push({ string: s, fret: f, cls: 'soft', label: nameOf(m) });
+    }
+    Guitar.fretboard(board, { frets: S.frets, marks, onPick: (s, f) => {
+      const m = Guitar.midi(s, f);
+      Sound.pluck(m, { dur: 1.5 });
+      const written = T.spell(m + 12, 0);
+      page.flash(null, `<span class="big">${UI.noteName(T.spell(m, 0), { octave: true })}</span> · ${t('string {s}, fret {f}', { s, f })}`);
+      page.el.card.innerHTML = Score.layout({ clef: 'guitar', tab: true, time: [4, 4], rh: `${T.name(written, { ascii: true, octave: true })}^${s}.${f}:1` }, { width: 26 }).svg;
+    } });
+  }
+
+  self.__state = () => ({ q, S });
+  start();
+})();
+</script>
+</body>
+</html>

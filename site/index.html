@@ -50,7 +50,7 @@
     <img src="/icon.svg" alt="">
     <div>
       <h1 id="name">Music Academy</h1>
-      <p data-t>Read faster, find the key, know the chords: music theory at the keyboard.</p>
+      <p data-t>Read faster, find the key, know the chords: music practice for piano and guitar.</p>
     </div>
     <button class="midi" id="midi"><span class="dot"></span><span class="midi-text">MIDI</span></button>
   </header>
@@ -65,6 +65,9 @@
     <div class="pref"><span data-t>Look</span><div class="seg" id="theme"></div></div>
     <div class="pref"><span data-t>Note names</span><div class="seg" id="names"></div></div>
     <div class="pref"><span data-t>Sound</span><div class="seg" id="sound"></div></div>
+    <div class="pref"><span data-t>Guitar tuning</span><div class="seg" id="gtuning"></div></div>
+    <div class="pref"><span data-t>Capo</span><div class="seg" id="gcapo"></div></div>
+    <div class="pref"><span data-t>Guitar fretboard</span><div class="seg" id="gleft"></div></div>
     <div class="pref"><span data-t>Your progress</span>
       <button class="btn" id="export" data-t>Save to a file</button>
       <button class="btn ghost" id="import" data-t>Load from a file</button>
@@ -74,7 +77,7 @@
   </section>
 
   <footer>
-    <span data-t>Works best with a digital piano connected by USB or Bluetooth MIDI, in Chrome or Edge. Without one, use the on-screen keyboard or the answer buttons. Install it as an app from the browser's menu; it then works offline.</span><br>
+    <span data-t>Piano: best with a digital piano over USB or Bluetooth MIDI, in Chrome or Edge; without one, use the on-screen keyboard or the answer buttons. Guitar: the microphone listens (allow it when asked), or click the fretboard. Install it as an app from the browser's menu; it then works offline.</span><br>
     <span data-t>Music font:</span> <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
   </footer>
 </div>
@@ -83,6 +86,7 @@
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
 <script src="/shared/drills.js"></script>
+<script src="/shared/guitar.js"></script>
 <script src="/shared/ui.js"></script>
 <script>
 (() => {
@@ -109,7 +113,7 @@
     const el = $('#drills');
     el.innerHTML = '';
     let today = 0;
-    for (const d of DRILLS.filter(d => (d.instrument === instrument || d.instrument === 'any') && d.audience.includes(ED.audience))) {
+    for (const d of DRILLS.filter(d => (d.instrument === instrument || d.instrument === 'any') && d.audience.includes(ED.audience)).sort((a, b) => (a.instrument === 'any') - (b.instrument === 'any'))) {
       const s = UI.summary(d.id);
       today += s.today;
       const st = d.noStats ? null : s.today
@@ -142,6 +146,12 @@
     UI.setPref('feedback', v === 'all');
   });
 
+  // guitar: shared by every guitar page (tuner, fretboard, chords …)
+  const G = () => UI.store.get('guitar', {});
+  const setG = (k, v) => { const g = G(); g[k] = v; UI.store.set('guitar', g); };
+  seg('gtuning', Object.entries(Guitar.TUNINGS).map(([id, tu]) => [id, t(tu.name)]), G().tuning || 'standard', v => setG('tuning', v));
+  seg('gcapo', [0, 1, 2, 3, 4, 5, 7].map(n => [n, n ? t('Fret {n}', { n }) : t('None')]), G().capo || 0, v => setG('capo', v));
+  seg('gleft', [[false, t('Right-handed')], [true, t('Left-handed (mirrored)')]], !!G().left, v => setG('left', v));
   $('#export').onclick = () => {
     const blob = new Blob([JSON.stringify(UI.exportData(), null, 1)], { type: 'application/json' });
     const a = h('a', { href: URL.createObjectURL(blob), download: `${ED.slug}-progress-${new Date().toISOString().slice(0, 10)}.json` });

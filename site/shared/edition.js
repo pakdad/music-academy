@@ -4,5 +4,5 @@ self.EDITION = {
   "name": "Music Academy",
   "slug": "music-academy",
   "audience": "adult",
-  "instruments": ["piano"]
+  "instruments": ["piano", "guitar"]
 };

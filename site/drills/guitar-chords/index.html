@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Guitar chords</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Chords: see the name, play the chord (the microphone listens for its notes); name a chord box; or build the
+// shape on the fretboard with the mouse.
+(() => {
+  const T = Theory, { h } = UI;
+  const SPEC = [
+    { id: 'mode', label: t('Drill'), type: 'choice', options: [['play', t('Play the chord')], ['name', t('Name the chord box')], ['shape', t('Find the shape (mouse)')]] },
+    { id: 'groups', label: t('Chords'), type: 'multi', options: Guitar.GROUPS.map(([id, n]) => [id, t(n)]) },
+    { id: 'box', label: t('Chord box'), type: 'choice', options: [['always', t('Always')], ['miss', t('After a miss')], ['never', t('Never')]], show: s => s.mode === 'play' },
+  ];
+  const DEFAULTS = { mode: 'play', groups: ['open', 'minor'], box: 'always' };
+  const page = UI.page({ drill: 'guitar-chords', title: t('Chords'), settings: SPEC, defaults: DEFAULTS, tools: ['mic', 'sound', 'stats', 'settings'], keyboard: false,
+    describe: id => Guitar.chordName(Guitar.chordById(id)), onSettings: () => start() });
+  const board = h('div', { class: 'board' });
+  page.el.answers.after(board);
+  const tools = h('div', { class: 'row' });
+  page.el.answers.before(tools);
+  Mic.wantChroma(true);
+  let S, q = null, wait = false;
+  const pool = () => Guitar.CHORDS.filter(c => S.groups.includes(c.group));
+  const strumOf = c => Sound.strum(Guitar.voicing(c).map(v => v.midi), { dur: 2.2 });
+
+  function start() { S = page.settings; next(); }
+  function next() {
+    wait = false;
+    page.clearFlash(); page.clearChoices();
+    board.innerHTML = ''; tools.innerHTML = '';
+    const list = pool();
+    const item = page.pick(list.map(c => c.id), { target: 3000, avoid: q ? [q.item] : [] });
+    const c = Guitar.chordById(item);
+    q = { item, c, missed: false, placed: {} };
+    if (S.mode === 'play') {
+      page.el.prompt.innerHTML = `${t('Play')} <span class="symbol">${Guitar.chordName(c)}</span><small>${t('strum it once and let it ring')}</small>`;
+      page.el.card.innerHTML = S.box === 'always' ? Guitar.diagram(c) : '';
+      tools.append(
+        h('button', { class: 'btn', onclick: () => strumOf(c) }, '▶ ' + t('Listen')),
+        h('button', { class: 'btn ghost', onclick: () => { if (!wait) { wait = true; page.flash(true, t('OK: next one.')); setTimeout(next, 500); } } }, '✓ ' + t('I played it')),
+        h('button', { class: 'btn ghost', onclick: () => next() }, t('Skip') + ' ›'));
+      if (Mic.state !== 'on') page.flash(null, t('Turn on the microphone (top right) so I can hear the chord, or use “I played it”.'));
+    } else if (S.mode === 'name') {
+      page.el.prompt.innerHTML = t('Which chord is this?');
+      page.el.card.innerHTML = Guitar.diagram(c, { size: 1.15 });
+      const others = UI.shuffle(Guitar.CHORDS.filter(x => x.id !== c.id && (S.groups.includes(x.group) || x.root === c.root))).slice(0, 5);
+      page.choices(UI.shuffle([c, ...others]).map(x => ({ label: Guitar.chordName(x), value: x.id })), (id, btn) => {
+        if (wait) return;
+        if (id === c.id) { btn.classList.add('right'); done(); }
+        else { btn.classList.add('wrong'); miss(t('It\'s <b>{chord}</b>.', { chord: Guitar.chordName(c) })); }
+      }, { columns: 3 });
+    } else {
+      page.el.prompt.innerHTML = t('Put your fingers for <b>{chord}</b> on the fretboard', { chord: Guitar.chordName(c) }) + `<small>${t('click the frets you press; click again to lift')}</small>`;
+      page.el.card.innerHTML = '';
+      drawShape();
+      tools.append(h('button', { class: 'btn primary', onclick: checkShape }, t('Check')), h('button', { class: 'btn ghost', onclick: () => { page.el.card.innerHTML = Guitar.diagram(c); q.missed = true; } }, t('Show me')));
+    }
+    page.ask(item);
+  }
+
+  function done() {
+    if (!q.missed) page.answer(true);
+    wait = true;
+    page.flash(true, `${Guitar.chordName(q.c)} ✓`);
+    page.el.card.innerHTML = Guitar.diagram(q.c);
+    strumOf(q.c);
+    setTimeout(next, 1400);
+  }
+  function miss(text) {
+    if (!q.missed) page.answer(false);
+    q.missed = true;
+    page.flash(false, text);
+    if (S.mode === 'play' && S.box === 'miss') page.el.card.innerHTML = Guitar.diagram(q.c);
+  }
+
+  // ---------- play: listen after each strum ----------
+  Mic.on('onset', o => {
+    if (!q || wait || S.mode !== 'play') return;
+    const t0 = performance.now();
+    setTimeout(() => {
+      if (!q || wait) return;
+      const chroma = Mic.chromaBetween(t0 + 60, t0 + 500);
+      if (!chroma) return;
+      // the expected chord against every other shape (power chords left out: they hide inside everything)
+      const shapes = Guitar.CHORDS.filter(c => c.type !== 'pow' || c.id === q.c.id);
+      const r = Guitar.recognise(chroma, shapes);
+      const want = r.scores.get(q.c.id);
+      if (want >= 0.75 && want >= r.score - 0.06) done();
+      else if (r.score < 0.6) page.flash(null, t('I couldn\'t hear a clear chord: strum all the strings once and let them ring.'));
+      else miss(t('Not quite: that sounded more like {chord}. Check each string rings clearly.', { chord: Guitar.chordName(r.best) }));
+    }, 520);
+  });
+
+  // ---------- shape: click the frets ----------
+  function drawShape(reveal) {
+    const marks = Object.entries(q.placed).map(([s, f]) => ({ string: +s, fret: f, cls: 'cur' }));
+    if (reveal) Guitar.voicing(q.c).forEach(v => { if (v.fret > 0 && q.placed[v.string] !== v.fret) marks.push({ string: v.string, fret: v.fret, cls: 'hint' }); });
+    Guitar.fretboard(board, { frets: 7, marks, onPick: (s, f) => {
+      if (wait || f === 0) return;
+      if (q.placed[s] === f) delete q.placed[s]; else q.placed[s] = f;
+      Sound.pluck(Guitar.midi(s, f), { dur: 0.8 });
+      drawShape();
+    } });
+  }
+  function checkShape() {
+    if (wait) return;
+    const want = {};
+    Guitar.voicing(q.c).forEach(v => { if (v.fret > 0) want[v.string] = v.fret; });
+    const ok = Object.keys(want).length === Object.keys(q.placed).length && Object.entries(want).every(([s, f]) => q.placed[s] === f);
+    if (ok) done();
+    else { miss(t('Not yet: the yellow dots show where the fingers go.')); drawShape(true); }
+  }
+  self.__state = () => ({ q, S });
+  start();
+})();
+</script>
+</body>
+</html>

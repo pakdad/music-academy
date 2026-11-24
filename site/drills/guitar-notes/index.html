@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Guitar note reading</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Guitar note reading: a note as notation (treble clef, an octave above how it sounds), as tab, and where it is on
+// the neck. Show all three while learning, then switch them off one by one. Answer by playing it (microphone), by
+// clicking any place on the fretboard that sounds it, or by naming it.
+(() => {
+  const T = Theory, { h } = UI;
+  const SPEC = [
+    { id: 'show', label: t('Show'), type: 'multi', options: [['staff', t('Notation')], ['tab', t('Tab')], ['fret', t('Position on the neck')]],
+      hint: t('Beginner: all three. Then switch off the position, then the tab, until you read the notes alone.') },
+    { id: 'strings', label: t('Strings'), type: 'multi', options: [[1, '1 (e)'], [2, '2 (B)'], [3, '3 (G)'], [4, '4 (D)'], [5, '5 (A)'], [6, '6 (E)']] },
+    { id: 'frets', label: t('Frets'), type: 'choice', options: [[3, t('0–3 (first position)')], [5, '0–5'], [12, '0–12']] },
+    { id: 'acc', label: t('Notes'), type: 'choice', options: [['nat', t('Naturals (no ♯/♭)')], ['all', t('With ♯ and ♭')]] },
+    { id: 'buttons', label: t('Name buttons'), type: 'choice', options: [[true, t('On')], [false, t('Off: play or click')]] },
+  ];
+  const DEFAULTS = { show: ['staff', 'tab', 'fret'], strings: [1, 2, 3], frets: 3, acc: 'nat', buttons: true };
+  const page = UI.page({ drill: 'guitar-notes', title: t('Note reading'), settings: SPEC, defaults: DEFAULTS, tools: ['mic', 'sound', 'stats', 'settings'], keyboard: false,
+    describe: k => { const [s, f] = k.split('.').map(Number); return `${UI.noteName(T.spell(Guitar.midi(s, f), 0), { octave: true })} · ${t('string {s}, fret {f}', { s, f })}`; },
+    onSettings: () => start() });
+  const levels = h('div', { class: 'row levels' });
+  const board = h('div', { class: 'board' });
+  page.el.prompt.before(levels);
+  page.el.answers.before(board);
+  const PRESETS = [['beginner', t('Beginner'), ['staff', 'tab', 'fret']], ['intermediate', t('Intermediate'), ['staff', 'tab']], ['advanced', t('Advanced'), ['staff']]];
+  let S, q = null, wait = false;
+  const NAT = [0, 2, 4, 5, 7, 9, 11];
+
+  function drawLevels() {
+    levels.innerHTML = '';
+    for (const [id, label, show] of PRESETS) {
+      const on = show.length === S.show.length && show.every(x => S.show.includes(x));
+      levels.append(h('button', { class: 'btn small' + (on ? ' primary' : ''), onclick: () => { const s = { ...S, show }; UI.store.set('settings:guitar-notes', s); location.reload(); } }, label));
+    }
+  }
+  function start() { S = page.settings; if (!S.show.length) S.show = ['staff']; drawLevels(); next(); }
+
+  function next() {
+    wait = false;
+    page.clearFlash();
+    const items = [];
+    for (const s of S.strings) for (let f = 0; f <= S.frets; f++) if (S.acc === 'all' || NAT.includes(T.mod(Guitar.midi(s, f), 12))) items.push(`${s}.${f}`);
+    const item = page.pick(items, { target: 2500, avoid: q ? [q.item] : [] });
+    const [s, f] = item.split('.').map(Number);
+    const m = Guitar.midi(s, f);
+    const fifths = S.acc === 'all' && Math.random() < 0.5 ? -3 : 0; // sometimes flats, sometimes sharps
+    q = { item, s, f, m, n: T.spell(m, fifths), missed: false };
+    draw(false);
+    page.el.prompt.innerHTML = t('Play this note') + `<small>${t('on your guitar, or click it on the fretboard')}</small>`;
+    if (S.buttons) {
+      const opts = (S.acc === 'nat' ? NAT : [...Array(12).keys()]).map(pc => ({ label: [1, 3, 6, 8, 10].includes(pc) ? `${UI.noteName(T.spell(pc + 60, 3))}/${UI.noteName(T.spell(pc + 60, -3))}` : UI.noteName(T.spell(pc + 60, 0)), value: pc }));
+      page.choices(opts, (pc, btn) => answer(pc === T.mod(m, 12), btn, t('It\'s <b>{note}</b>.', { note: UI.noteName(q.n) })), { columns: Math.min(7, opts.length) });
+    } else page.clearChoices();
+    page.ask(item);
+  }
+
+  function draw(reveal) {
+    const show = new Set(S.show);
+    const written = T.transpose(q.n, 7, 12); // guitar music is written an octave above how it sounds
+    if (show.has('staff') || show.has('tab') || reveal) {
+      page.el.card.innerHTML = Score.layout({ clef: 'guitar', tab: show.has('tab') || reveal, notation: show.has('staff') || reveal || !show.has('tab'), time: [4, 4],
+        rh: `${T.name(written, { ascii: true, octave: true })}^${q.s}.${q.f}:1` }, { width: 24 }).svg;
+    } else page.el.card.innerHTML = '';
+    const marks = show.has('fret') || reveal ? [{ string: q.s, fret: q.f, cls: reveal ? 'good' : 'cur', label: reveal ? UI.noteName(q.n) : '' }] : [];
+    if (reveal) for (const p of Guitar.positions(q.m, Math.max(12, S.frets))) if (p.string !== q.s) marks.push({ ...p, cls: 'soft', label: UI.noteName(q.n) });
+    Guitar.fretboard(board, { frets: Math.max(5, S.frets === 3 ? 5 : S.frets), marks, onPick: pick });
+  }
+
+  function answer(ok, btn, wrongText) {
+    if (!q || wait) return;
+    if (ok) {
+      btn && btn.classList.add('right');
+      if (!q.missed) page.answer(true);
+      wait = true;
+      draw(true);
+      page.flash(true, `${UI.noteName(q.n, { octave: true })} · ${t('string {s}, fret {f}', { s: q.s, f: q.f })}`);
+      setTimeout(next, 1000);
+    } else {
+      btn && btn.classList.add('wrong');
+      if (!q.missed) page.answer(false);
+      q.missed = true;
+      page.flash(false, wrongText);
+    }
+  }
+  function pick(s, f) {
+    const m = Guitar.midi(s, f);
+    Sound.pluck(m, { dur: 1 });
+    answer(m === q.m, null, t('That\'s {note} (string {s}, fret {f}).', { note: UI.noteName(T.spell(m, 0), { octave: true }), s, f }));
+  }
+  Mic.on('note', n => {
+    if (!q || wait) return;
+    answer(n.midi === q.m, null, t('You played {note}.', { note: UI.noteName(T.spell(n.midi, 0), { octave: true }) }) + (T.mod(n.midi, 12) === T.mod(q.m, 12) ? ' ' + t('Right note, wrong octave.') : ''));
+  });
+  self.__state = () => ({ q, S });
+  start();
+})();
+</script>
+</body>
+</html>

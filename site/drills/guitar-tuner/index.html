@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Tuner</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Tuner: play one string at a time; the needle shows how many cents sharp or flat it is.
+// Choose a tuning, or tap a string to hear its reference tone.
+(() => {
+  const T = Theory, { h } = UI;
+  const page = UI.page({ drill: 'guitar-tuner', title: t('Tuner'), hud: false, tools: ['mic', 'sound'], keyboard: false, onSettings() {} });
+  const stage = page.el.prompt.parentElement;
+  stage.innerHTML = '';
+  const G = () => UI.store.get('guitar', {});
+  const setG = (k, v) => { const g = G(); g[k] = v; UI.store.set('guitar', g); };
+  let target = null; // a string number, or null for automatic
+
+  const note = h('div', { class: 'tuner-note' }, '–');
+  const hz = h('div', { class: 'tuner-hz muted' }, ' ');
+  const needle = h('div', { class: 'tuner-gauge' });
+  const msg = h('div', { class: 'tuner-msg' }, t('Turn on the microphone, then play one string.'));
+  const strings = h('div', { class: 'tuner-strings' });
+  const tuningSel = h('div', { class: 'seg' });
+  const a4 = h('input', { type: 'number', min: 430, max: 450, step: 1, value: G().a4 || 440, class: 'text a4', onchange: e => setG('a4', Math.max(430, Math.min(450, +e.target.value || 440))) });
+  const startBtn = h('button', { class: 'btn primary big', onclick: () => Mic.start() }, '🎤 ' + t('Start listening'));
+
+  stage.append(h('div', { class: 'card tuner' }, note, hz, needle, msg, startBtn, strings),
+    h('div', { class: 'card tuner-settings' },
+      h('div', { class: 'ctl' }, h('span', {}, t('Tuning')), tuningSel),
+      h('div', { class: 'ctl' }, h('span', {}, 'A4'), a4, h('span', { class: 'muted' }, 'Hz')),
+      h('p', { class: 'hint' }, t('Tap a string to hear its note and tune to that string only; tap it again to go back to automatic.'))));
+
+  function drawTunings() {
+    tuningSel.innerHTML = '';
+    for (const [id, tu] of Object.entries(Guitar.TUNINGS)) tuningSel.append(h('button', { class: Guitar.settings().tuning === id ? 'on' : '', onclick: () => { setG('tuning', id); drawTunings(); drawStrings(); } }, t(tu.name)));
+  }
+  function drawStrings(active) {
+    strings.innerHTML = '';
+    const open = Guitar.openStrings();
+    for (let s = 6; s >= 1; s--) {
+      const m = open[s - 1] - (Guitar.settings().capo || 0);
+      strings.append(h('button', { class: 'tstring' + (target === s ? ' on' : '') + (active === s ? ' hit' : ''), onclick: () => {
+        target = target === s ? null : s;
+        Sound.pluck(m, { dur: 2.5 });
+        drawStrings();
+      } }, h('b', {}, UI.noteName(T.spell(m, 0))), h('small', {}, `${s}`)));
+    }
+  }
+  drawTunings(); drawStrings();
+
+  // gauge: an arc from −50 to +50 cents
+  needle.innerHTML = `<svg viewBox="0 0 300 160"><path class="arc" d="M30 150 A120 120 0 0 1 270 150"/>
+    <path class="arc-good" d="M${150 - 120 * Math.sin(0.09)} ${150 - 120 * Math.cos(0.09)} A120 120 0 0 1 ${150 + 120 * Math.sin(0.09)} ${150 - 120 * Math.cos(0.09)}"/>
+    ${[-50, -25, 0, 25, 50].map(c => { const a = c / 50 * 1.2; return `<line class="tick" x1="${150 + 112 * Math.sin(a)}" y1="${150 - 112 * Math.cos(a)}" x2="${150 + 128 * Math.sin(a)}" y2="${150 - 128 * Math.cos(a)}"/><text class="ticklabel" x="${150 + 142 * Math.sin(a)}" y="${154 - 142 * Math.cos(a)}" text-anchor="middle">${c > 0 ? '+' + c : c}</text>`; }).join('')}
+    <line class="needle" x1="150" y1="150" x2="150" y2="40"/><circle cx="150" cy="150" r="6"/></svg>`;
+  const needleEl = needle.querySelector('.needle');
+  const setNeedle = c => needleEl.setAttribute('transform', `rotate(${Math.max(-60, Math.min(60, c / 50 * 68.75))} 150 150)`);
+  setNeedle(0);
+
+  const recent = [];
+  let goodSince = 0;
+  Mic.on('state', s => { startBtn.style.display = s === 'on' ? 'none' : ''; if (s === 'denied') msg.textContent = t('The microphone is blocked: allow it in the browser\'s site settings and reload.'); if (s === 'unsupported') msg.textContent = t('This browser can\'t use the microphone here (it needs https).'); });
+  Mic.on('frame', f => {
+    if (f.midi === null) { if (f.rms < 0.003) { recent.length = 0; } return; }
+    recent.push(f.midi); if (recent.length > 5) recent.shift();
+    const m = [...recent].sort((a, b) => a - b)[Math.floor(recent.length / 2)];
+    // the string: the one chosen, or the nearest open string
+    const open = Guitar.openStrings();
+    let s = target;
+    if (!s) { let best = 99; open.forEach((o, i) => { if (Math.abs(m - o) < best) { best = Math.abs(m - o); s = i + 1; } }); if (best > 4.5) s = null; }
+    const ref = s ? open[s - 1] : Math.round(m);
+    const cents = Math.round((m - ref) * 100);
+    note.innerHTML = `${UI.noteName(T.spell(Math.round(m), 0))}<small>${Math.floor(Math.round(m) / 12) - 1}</small>`;
+    hz.textContent = `${f.freq.toFixed(1)} Hz` + (s ? ' · ' + t('string {n}: {note}', { n: s, note: UI.noteName(T.spell(open[s - 1], 0)) }) : '');
+    if (Math.abs(cents) > 300) { msg.textContent = t('That\'s far from this string: is it the right one?'); setNeedle(cents < 0 ? -50 : 50); return; }
+    setNeedle(cents);
+    const ok = Math.abs(cents) <= 5;
+    if (ok && !goodSince) goodSince = performance.now();
+    if (!ok) goodSince = 0;
+    const tuned = ok && performance.now() - goodSince > 400;
+    stage.querySelector('.tuner').classList.toggle('intune', tuned);
+    msg.textContent = tuned ? t('In tune ✓') : cents < 0 ? t('{n} cents flat: tighten (tune up)', { n: -cents }) : t('{n} cents sharp: loosen (tune down)', { n: cents });
+    drawStrings(s);
+  });
+  addEventListener('keydown', e => { if (e.code === 'Space' && !e.target.closest?.('input')) { e.preventDefault(); Mic.state === 'on' ? Mic.stop() : Mic.start(); } });
+  self.__state = () => ({ target });
+})();
+</script>
+</body>
+</html>

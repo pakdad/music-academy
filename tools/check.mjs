@@ -14,7 +14,7 @@ const SITE = path.join(ROOT, 'site');
 const ctx = { self: {} };
 vm.createContext(ctx);
 ctx.TextDecoder = TextDecoder; ctx.TextEncoder = TextEncoder;
-for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills', 'importer']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
+for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills', 'importer', 'guitar']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
 const T = ctx.self.Theory, Staff = ctx.self.Staff;
 
 let failed = 0, passed = 0;
@@ -204,6 +204,37 @@ for (const p of ctx.self.PIECES) {
   eq(enc.text, 'C4:4 r:2 E4:4 | r:1', 'importer shortens notes instead of tying, and merges rests');
 }
 
+// ---------- guitar: every chord shape sounds its chord; patterns fill their bars; tab engraves ----------
+{
+  const Gt = ctx.self.Guitar;
+  eq(Gt.openStrings('standard'), [64, 59, 55, 50, 45, 40], 'standard tuning, string 1 first');
+  eq(Gt.midi(6, 3), 43, 'G on the low E string, 3rd fret');
+  eq(Gt.positions(64, 12).map(p => `${p.string}.${p.fret}`).join(' '), '1.0 2.5 3.9 4.14'.split(' ').filter(x => +x.split('.')[1] <= 12).join(' '), 'every place of E4 up to fret 12');
+  const ids = new Set();
+  for (const c of Gt.CHORDS) {
+    if (ids.has(c.id)) { failed++; console.error(`✗ chord ${c.id}: twice`); }
+    ids.add(c.id);
+    const want = Gt.chordPcs(c);
+    const v = Gt.voicing(c, 'standard');
+    const got = [...new Set(v.map(n => T.mod(n.midi, 12)))];
+    const root = T.pc(T.parse(c.root + '4'));
+    const fifth = T.mod(root + 7, 12);
+    const bad = got.filter(p => !want.includes(p));
+    const missing = want.filter(p => !got.includes(p) && p !== fifth);
+    if (bad.length || missing.length || T.mod(v[0].midi, 12) !== root) { failed++; console.error(`✗ chord ${c.id}: shape sounds ${got.join(',')}, wants ${want.join(',')} with the root lowest`); }
+    else passed++;
+    if (c.frets.some((f, i) => (f > 0) !== (c.fingers[i] > 0))) { failed++; console.error(`✗ chord ${c.id}: fingers don't match the frets`); } else passed++;
+  }
+  for (const p of Gt.STRUMS) eq(p.pattern.length, p.time[0] * (p.time[1] === 4 ? 2 : 1), `strum ${p.id} fills its bar with eighths`);
+  for (const p of Gt.PICKS) eq(p.slots.length, p.time[0] * (p.time[1] === 4 ? 2 : 1), `picking ${p.id} fills its bar with eighths`);
+  for (const [notation, tab] of [[true, true], [false, true], [true, false]]) {
+    const out = Score.layout({ clef: 'guitar', tab, notation, time: [4, 4], key: 1, rh: 'G4^3.0:4=C E5^1.0:8=p F#5^1.2:8 r:4 B4+D5^2.0:4 | G4^3.0:8. A4^3.2:16 B4^2.0:2. ' }, { width: 80 });
+    if (out.svg.includes('NaN') || out.svg.includes('undefined')) { failed++; console.error(`✗ guitar layout (notation ${notation}, tab ${tab}) has NaN`); } else passed++;
+    eq(out.events[0].midis, [55], 'guitar notation sounds an octave lower than written');
+    if (tab) eq((out.svg.match(/class="tabnum"/g) || []).length, 7, 'every note has its fret number on the tab');
+  }
+}
+
 // ---------- German: every text the pages show has a translation ----------
 {
   const de = { self: {} };
@@ -222,6 +253,11 @@ for (const p of ctx.self.PIECES) {
   for (const sc of Object.values(T.SCALES)) keys.set(sc.name, 'theory.js scales');
   for (const pr of T.PROGRESSIONS) keys.set(pr.name, 'theory.js progressions');
   for (const k of ['treble', 'bass', '1st inversion', '2nd inversion', '3rd inversion', 'Piano', 'Guitar']) keys.set(k, 'dynamic');
+  const Gt = ctx.self.Guitar;
+  for (const tu of Object.values(Gt.TUNINGS)) keys.set(tu.name, 'guitar.js tunings');
+  for (const [, n] of Gt.GROUPS) keys.set(n, 'guitar.js chord groups');
+  for (const p of [...Gt.STRUMS, ...Gt.PICKS]) keys.set(p.name, 'guitar.js patterns');
+  for (const n of ['C major', 'G major', 'A minor pentatonic', 'E minor pentatonic']) keys.set(n, 'guitar-tab scales');
   const ph = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',');
   let missing = 0;
   for (const [k, where] of keys) {

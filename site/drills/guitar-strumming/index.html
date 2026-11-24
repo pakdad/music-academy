@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Strumming</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/transport.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/mic.js"></script>
+<script>
+// Strumming: patterns of down (↓) and up (↑) strums on eighth notes. Listen, then strum along with the metronome;
+// every strum is checked for timing (microphone), or tap Space / the pad / click instead.
+// Keep the hand moving down and up all the time: the strums are where it touches the strings.
+(() => {
+  const T = Theory, { h } = UI;
+  const page = UI.page({ drill: 'guitar-strumming', title: t('Strumming'), hud: false, tools: ['mic', 'sound'], keyboard: false, onSettings() {} });
+  const stage = page.el.prompt.parentElement;
+  stage.innerHTML = '';
+  const st = { pattern: 'quarters', chord: 'G', bpm: 70, bars: 2, ...UI.store.get('guitar-strumming', {}) };
+  const save = () => UI.store.set('guitar-strumming', st);
+  const seg = (options, get, set) => { const el = h('div', { class: 'seg' }); const draw = () => { el.innerHTML = ''; for (const [v, l] of options) el.append(h('button', { class: v === get() ? 'on' : '', onclick: () => { set(v); save(); draw(); stop(); render(); } }, l)); }; draw(); return el; };
+  const tempo = h('input', { type: 'range', min: 40, max: 160, value: st.bpm, oninput: e => { st.bpm = +e.target.value; tempoOut.textContent = `♩ = ${st.bpm}`; save(); } });
+  const tempoOut = h('span', { class: 'num' }, `♩ = ${st.bpm}`);
+  const status = h('div', { class: 'pstatus' });
+  const listenBtn = h('button', { class: 'btn', onclick: () => go(true) }, '▶ ' + t('Listen'));
+  const playBtn = h('button', { class: 'btn primary big', onclick: () => run ? stop() : go(false) }, '● ' + t('Strum along'));
+  const card = h('div', { class: 'card score-card' });
+  const arrows = h('div', { class: 'arrows' });
+  const feedback = h('div', { class: 'feedback' });
+  const pad = h('button', { class: 'pad', onpointerdown: e => { e.preventDefault(); hit(e.timeStamp || performance.now(), true); } }, t('Tap here (or Space) if you have no microphone'));
+  stage.append(
+    h('div', { class: 'controls' },
+      h('div', { class: 'ctl' }, h('span', {}, t('Pattern')), seg(Guitar.STRUMS.map(p => [p.id, `${t(p.name)} · ${p.time.join('/')}`]), () => st.pattern, v => { st.pattern = v; })),
+      h('div', { class: 'ctl' }, h('span', {}, t('Chord')), seg(['G', 'C', 'D', 'Em', 'Am', 'A', 'E'].map(id => [id, Guitar.chordName(Guitar.chordById(id))]), () => st.chord, v => { st.chord = v; })),
+      h('div', { class: 'ctl' }, h('span', {}, t('Length')), seg([[2, t('{n} bars', { n: 2 })], [4, t('{n} bars', { n: 4 })]], () => st.bars, v => { st.bars = v; })),
+      h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, tempoOut),
+      h('div', { class: 'ctl go' }, listenBtn, playBtn, status)),
+    arrows, card, feedback, pad);
+
+  let P = null, L = null, run = null, evEls = {};
+  // the pattern as rhythm: a strum followed by a rest slot becomes a quarter note
+  function build() {
+    const p = Guitar.STRUMS.find(x => x.id === st.pattern) || Guitar.STRUMS[0];
+    const tokens = [], hits = [];
+    const s = p.pattern;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '-') { tokens.push('r:8'); continue; }
+      const arrow = c === 'D' ? '↓' : '↑';
+      if (i % 2 === 0 && s[i + 1] === '-' && p.time[1] === 4) { tokens.push(`B4:4=${arrow}`); hits.push({ slot: i, dir: c }); i++; }
+      else if (p.time[1] === 8 && s[i + 1] === '-' && i % 3 === 0) { tokens.push(`B4:4=${arrow}`); hits.push({ slot: i, dir: c }); i++; }
+      else { tokens.push(`B4:8=${arrow}`); hits.push({ slot: i, dir: c }); }
+    }
+    const bar = tokens.join(' ');
+    return { p, hits, piece: { clef: 'rhythm', time: p.time, rh: Array(st.bars).fill(bar).join(' | '), title: t(p.name) } };
+  }
+  function render() {
+    P = build();
+    L = Score.layout(P.piece, { width: 100 });
+    card.innerHTML = L.svg;
+    evEls = [...card.querySelectorAll('.ev')].reduce((m, g) => (m[g.dataset.i] = g, m), {});
+    arrows.innerHTML = '';
+    for (const c of P.p.pattern) arrows.append(h('span', { class: c === '-' ? 'gap' : '' }, c === 'D' ? '↓' : c === 'U' ? '↑' : '·'));
+    feedback.className = 'feedback';
+  }
+  render();
+
+  function go(listen) {
+    stop();
+    render();
+    Sound.unlock();
+    if (!listen) Mic.start();
+    const [num, den] = P.p.time;
+    const slotQ = 0.5; // an eighth note, in quarter notes
+    const L4 = num * 4 / den;
+    const countIn = L4;
+    const tr = Transport.create({
+      bpm: st.bpm, stepsPerBeat: 2,
+      onStep: (s, time) => {
+        const q = s / 2 - countIn;
+        if (q >= L.length) return;
+        const inBar = ((q % L4) + L4) % L4;
+        const beat = den === 8 ? Math.abs(inBar / 1.5 - Math.round(inBar / 1.5)) < 1e-6 : Math.abs(inBar - Math.round(inBar)) < 1e-6;
+        if (beat) Sound.click(time, inBar < 1e-6 ? 2 : 1, q < 0 ? 1 : 0.6);
+      },
+    });
+    const voicing = Guitar.voicing(Guitar.chordById(st.chord)).map(v => v.midi);
+    const evs = L.events.filter(e => !e.rest);
+    const expected = evs.map(e => ({ e, beat: e.t + countIn, dir: e.label === '↑' ? 'up' : 'down', done: false }));
+    if (listen) for (const x of expected) tr.at(x.beat, time => Sound.strum(x.dir === 'up' ? voicing.slice(-4) : voicing, { when: time, dir: x.dir, dur: 0.9 }));
+    const msBeat = tr.msPerBeat;
+    run = { listen, tr, expected, win: Math.min(200, 0.35 * msBeat), good: Math.max(50, 0.12 * msBeat), hits: [], extra: 0 };
+    tr.start();
+    playBtn.textContent = listen ? playBtn.textContent : '■ ' + t('Stop');
+    const slots = [...arrows.children];
+    const loop = () => {
+      if (!run) return;
+      const beat = tr.beatNow(), b = beat - countIn;
+      if (b < 0) status.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span>`;
+      else {
+        status.textContent = listen ? t('Listen…') : t('Strum!');
+        const slot = Math.floor((b % L4) / slotQ);
+        slots.forEach((el, i) => el.classList.toggle('on', i === slot));
+      }
+      if (!listen) {
+        const late = beat - run.win / msBeat;
+        for (const x of expected) if (!x.done && x.beat < late) { x.done = true; x.miss = true; mark(x.e, 'bad'); }
+      }
+      if (b > L.length + 0.3) return finish();
+      run.raf = requestAnimationFrame(loop);
+    };
+    run.raf = requestAnimationFrame(loop);
+  }
+  const mark = (e, c) => { const g = evEls[e.i]; if (g) { g.classList.remove('good', 'off', 'bad'); g.classList.add(c); } };
+  function hit(time, fromTap) {
+    if (!run) { if (fromTap) go(false); return; }
+    if (run.listen) return;
+    if (fromTap) Sound.click(null, 0, 0.4);
+    const at = run.tr.beatOfPerf(time);
+    let best = null;
+    for (const x of run.expected) if (!x.done && Math.abs(at - x.beat) * run.tr.msPerBeat <= run.win && (!best || Math.abs(at - x.beat) < Math.abs(at - best.beat))) best = x;
+    if (!best) { if (at > run.expected[0].beat - 0.5) run.extra++; return; }
+    best.done = true;
+    best.off = (at - best.beat) * run.tr.msPerBeat;
+    run.hits.push(best.off);
+    mark(best.e, Math.abs(best.off) <= run.good ? 'good' : 'off');
+  }
+  function stop() {
+    if (!run) return;
+    run.tr.stop(); cancelAnimationFrame(run.raf); run = null;
+    playBtn.textContent = '● ' + t('Strum along');
+    [...arrows.children].forEach(el => el.classList.remove('on'));
+  }
+  function finish() {
+    const r = run;
+    stop();
+    status.textContent = '';
+    if (r.listen) return;
+    const total = r.expected.length, onTime = r.expected.filter(x => !x.miss && Math.abs(x.off) <= r.good).length, hit = r.expected.filter(x => !x.miss).length;
+    const score = Math.max(0, Math.round((onTime + 0.6 * (hit - onTime)) / total * 100 - 6 * r.extra));
+    const mean = r.hits.length ? r.hits.reduce((a, b) => a + b, 0) / r.hits.length : 0;
+    feedback.className = 'feedback show ' + (score >= 90 ? 'ok' : score >= 60 ? 'info' : 'bad');
+    feedback.innerHTML = `<span class="big">${score} %</span><br>` + t('{a} of {b} on time', { a: onTime, b: total }) +
+      (total > hit ? ', ' + t('{n} missed', { n: total - hit }) : '') + (r.extra ? ', ' + (r.extra > 1 ? t('{n} extra strums', { n: r.extra }) : t('1 extra strum')) : '') +
+      (r.hits.length > 2 && Math.abs(mean) > 20 ? ' · ' + (mean > 0 ? t('on average {n} ms late', { n: Math.round(mean) }) : t('on average {n} ms early', { n: Math.round(-mean) })) : '');
+  }
+  Mic.on('onset', o => hit(o.time, false));
+  addEventListener('keydown', e => { if ((e.code === 'Space' || e.code === 'KeyJ') && !e.target.closest?.('dialog, input') && !e.repeat) { e.preventDefault(); hit(e.timeStamp || performance.now(), true); } });
+  self.__state = () => ({ run, st, P });
+})();
+</script>
+</body>
+</html>

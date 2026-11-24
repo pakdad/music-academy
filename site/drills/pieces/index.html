@@ -435,7 +435,7 @@
 
   Input.on(e => { if (e.type === 'on' && run && run.onNote) run.onNote(e.midi, e.time); });
   addEventListener('keydown', e => {
-    if (e.code === 'Space' && P && location.hash && !e.target.closest('dialog, input')) { e.preventDefault(); run ? stop(true) : start(); }
+    if (e.code === 'Space' && P && location.hash && !e.target.closest?.('dialog, input')) { e.preventDefault(); run ? stop(true) : start(); }
   });
   let resizeTimer;
   addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (P && !run && location.hash) render(); }, 200); });

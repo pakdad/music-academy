@@ -21,6 +21,7 @@
 <script src="/shared/keyboard.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
+<script src="/shared/mic.js"></script>
 <script>
 // Metronome and timing: a metronome, plus a check of how close to the beat you play (any key, MIDI or
 // on-screen, or tap). Silent bars train the pulse inside you; calibration measures this setup's delay.
@@ -74,6 +75,10 @@
   const pad = h('button', { class: 'pad', onpointerdown: e => { e.preventDefault(); hit(e.timeStamp || performance.now()); } }, t('Tap on the beat'));
   const calOut = h('span', { class: 'muted' });
   const calBtn = h('button', { class: 'btn', onclick: () => calibrate() }, t('Measure my delay'));
+  // the microphone as input: clap, strum, play an acoustic instrument (it has its own delay, measured separately)
+  const micToggle = h('label', { class: 'tgl' }, h('input', { type: 'checkbox', onchange: e => { if (e.target.checked) Mic.start(); else Mic.stop(); showCal(); } }), t('Listen with the microphone'));
+  Mic.on('onset', o => hit(o.time + 0, 'mic'));
+  Mic.on('state', s => { micToggle.querySelector('input').checked = s === 'on'; });
   let hits = [];
 
   stage.append(
@@ -93,7 +98,7 @@
       h('h3', {}, t('How close to the beat?')),
       h('p', { class: 'muted' }, t('Play any key on the beat (MIDI or on-screen), tap the pad, or press J. In “Eighths” and finer, every click counts.')),
       last, strip, statsEl, pad,
-      h('div', { class: 'row cal' }, calBtn, calOut)));
+      h('div', { class: 'row cal' }, micToggle, calBtn, calOut)));
   setBpm(S.bpm);
   showCal();
 
@@ -155,11 +160,11 @@
   function restart() { if (run && !run.calibrate) startRun(); }
 
   // a hit, at a time on the performance.now() clock
-  function hit(time) {
+  function hit(time, source) {
     if (!run) return;
     const raw = run.tr.beatOfPerf(time);
     if (raw < -0.25) return;
-    const pos = (run.calibrate ? raw : run.tr.beatOfPerf(time - (UI.prefs.latency || 0))) * run.steps;
+    const pos = (run.calibrate || source === 'mic' ? raw : run.tr.beatOfPerf(time - (UI.prefs.latency || 0))) * run.steps;
     const off = (pos - Math.round(pos)) / run.steps * run.tr.msPerBeat;
     if (run.calibrate) return calHit(off);
     hits.push(off);
@@ -183,7 +188,7 @@
   }
 
   // ---------- calibration: the delay between what you hear and when your notes arrive ----------
-  function showCal() { calOut.textContent = t('Delay correction: {n} ms', { n: Math.round(UI.prefs.latency || 0) }); }
+  function showCal() { calOut.textContent = Mic.state === 'on' ? t('Microphone delay correction: {n} ms', { n: Math.round(UI.prefs.micLatency || 0) }) : t('Delay correction: {n} ms', { n: Math.round(UI.prefs.latency || 0) }); }
   function calibrate() {
     hits = []; strip.querySelectorAll('.hit').forEach(d => d.remove());
     startRun({ calibrate: true, bpm: 90 });
@@ -197,14 +202,16 @@
     const sorted = run.raw.slice(4).sort((a, b) => a - b); // the first few are settling in
     const median = sorted[Math.floor(sorted.length / 2)];
     stopRun();
-    UI.setPref('latency', Math.max(-50, Math.min(250, median)));
+    // the microphone's times already have its old correction taken off: add what is left over
+    if (Mic.state === 'on') UI.setPref('micLatency', Math.max(-50, Math.min(300, (UI.prefs.micLatency || 0) + median)));
+    else UI.setPref('latency', Math.max(-50, Math.min(250, median)));
     showCal();
     calOut.textContent += ' ' + t('(saved; it applies to “Play along” in the pieces too)');
   }
 
   Input.on(e => { if (e.type === 'on') hit(e.time); });
   addEventListener('keydown', e => {
-    if (e.target.closest('dialog, input')) return;
+    if (e.target.closest?.('dialog, input')) return;
     if (e.code === 'Space') { e.preventDefault(); run && !run.calibrate ? stopRun() : startRun(); }
     else if (e.code === 'KeyJ' || e.code === 'KeyF' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) hit(e.timeStamp || performance.now()); }
     else if (e.code === 'ArrowUp') setBpm(S.bpm + (e.shiftKey ? 5 : 1));
