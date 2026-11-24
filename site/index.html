@@ -9,6 +9,9 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
 <title>Music Academy</title>
 <style>
   body { overflow-y: auto; }
@@ -47,7 +50,7 @@
     <img src="/icon.svg" alt="">
     <div>
       <h1 id="name">Music Academy</h1>
-      <p>Read faster, find the key, know the chords: music theory at the keyboard.</p>
+      <p data-t>Read faster, find the key, know the chords: music theory at the keyboard.</p>
     </div>
     <button class="midi" id="midi"><span class="dot"></span><span class="midi-text">MIDI</span></button>
   </header>
@@ -57,25 +60,25 @@
   <div class="grid" id="drills"></div>
 
   <section class="prefs">
-    <h2>Settings</h2>
-    <div class="pref"><span>Note names</span><div class="seg" id="names"></div></div>
-    <div class="pref"><span>Sound</span><div class="seg" id="sound"></div></div>
-    <div class="pref"><span>Your progress</span>
-      <button class="btn" id="export">Save to a file</button>
-      <button class="btn ghost" id="import">Load from a file</button>
+    <h2 data-t>Settings</h2>
+    <div class="pref"><span data-t>Language</span><div class="seg" id="lang"></div></div>
+    <div class="pref"><span data-t>Look</span><div class="seg" id="theme"></div></div>
+    <div class="pref"><span data-t>Note names</span><div class="seg" id="names"></div></div>
+    <div class="pref"><span data-t>Sound</span><div class="seg" id="sound"></div></div>
+    <div class="pref"><span data-t>Your progress</span>
+      <button class="btn" id="export" data-t>Save to a file</button>
+      <button class="btn ghost" id="import" data-t>Load from a file</button>
       <input type="file" id="file" accept="application/json" hidden>
     </div>
-    <p class="hint" style="margin:0">Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.</p>
+    <p class="hint" style="margin:0" data-t>Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.</p>
   </section>
 
   <footer>
-    Works best with a digital piano connected by USB or Bluetooth MIDI, in Chrome or Edge. Without one, use the on-screen keyboard or the answer buttons.
-    Install it as an app from the browser's menu; it then works offline.<br>
-    Music font: <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
+    <span data-t>Works best with a digital piano connected by USB or Bluetooth MIDI, in Chrome or Edge. Without one, use the on-screen keyboard or the answer buttons. Install it as an app from the browser's menu; it then works offline.</span><br>
+    <span data-t>Music font:</span> <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
   </footer>
 </div>
 
-<script src="/shared/edition.js"></script>
 <script src="/shared/theory.js"></script>
 <script src="/shared/audio.js"></script>
 <script src="/shared/input.js"></script>
@@ -97,8 +100,8 @@
     el.innerHTML = '';
     for (const [id, label] of INSTRUMENTS) {
       const live = ED.instruments.includes(id);
-      el.append(h('button', { class: 'tab' + (id === instrument ? ' on' : ''), disabled: !live, title: live ? '' : 'Coming later',
-        onclick: () => { instrument = id; UI.store.set('instrument', id); tabs(); drills(); } }, label + (live ? '' : ' · soon')));
+      el.append(h('button', { class: 'tab' + (id === instrument ? ' on' : ''), disabled: !live, title: live ? '' : t('Coming later'),
+        onclick: () => { instrument = id; UI.store.set('instrument', id); tabs(); drills(); } }, t(label) + (live ? '' : ' · ' + t('soon'))));
     }
   }
 
@@ -110,19 +113,19 @@
       const s = UI.summary(d.id);
       today += s.today;
       const st = d.noStats ? null : s.today
-        ? h('div', { class: 'st', html: `Today <b>${s.today}</b> · ${Math.round(s.acc * 100)} % · ⏱ ${s.avg ? UI.sec(s.avg) : '–'} · ${s.total} in all` })
-        : h('div', { class: 'st' }, s.total ? `${s.total} answered · last ${new Date(s.last).toLocaleDateString()}` : 'Not started yet');
+        ? h('div', { class: 'st', html: t('Today <b>{n}</b> · {acc} % · ⏱ {avg} · {total} in all', { n: s.today, acc: Math.round(s.acc * 100), avg: s.avg ? UI.sec(s.avg) : '–', total: s.total }) })
+        : h('div', { class: 'st' }, s.total ? t('{n} answered · last {date}', { n: s.total, date: new Date(s.last).toLocaleDateString(I18N.lang) }) : t('Not started yet'));
       el.append(h('a', { class: 'drill', href: '/' + d.path },
-        h('div', { class: 'top' }, h('div', { class: 'ic' }, d.icon), h('h2', {}, d.name)),
-        h('p', {}, d.about), st));
+        h('div', { class: 'top' }, h('div', { class: 'ic' }, d.icon), h('h2', {}, tr(d, 'name'))),
+        h('p', {}, tr(d, 'about')), st));
     }
     // days in a row with some practice
     const days = new Set(UI.store.get('sessions', []).map(s => new Date(s.start).toDateString()));
     let streak = 0;
     for (let t = new Date(); days.has(t.toDateString()); t.setDate(t.getDate() - 1)) streak++;
     $('#today').innerHTML = today
-      ? `Today: <b>${today}</b> answers` + (streak > 1 ? ` · <b>${streak}</b> days in a row` : '')
-      : streak ? `Yesterday you practised: keep the streak going.` : 'Pick a drill. Ten focused minutes a day beats an hour a week.';
+      ? t('Today: <b>{n}</b> answers', { n: today }) + (streak > 1 ? ' · ' + t('<b>{n}</b> days in a row', { n: streak }) : '')
+      : streak ? t('Yesterday you practised: keep the streak going.') : t('Pick a drill. Ten focused minutes a day beats an hour a week.');
   }
 
   function seg(id, options, value, onPick) {
@@ -130,9 +133,11 @@
     el.innerHTML = '';
     for (const [v, label] of options) el.append(h('button', { class: v === value ? 'on' : '', onclick: () => { onPick(v); seg(id, options, v, onPick); } }, label));
   }
-  seg('names', [['en', 'English: C D E F G A B, B♭'], ['de', 'Deutsch: C D E F G A H, B']], UI.prefs.names, v => UI.setPref('names', v));
+  seg('lang', [['en', 'English'], ['de', 'Deutsch']], I18N.lang, v => { UI.setPref('names', v); UI.setPref('lang', v); });
+  seg('theme', [['color', t('pakdad.com colours')], ['mono', t('Black & white')]], I18N.theme, v => UI.setPref('theme', v));
+  seg('names', [['en', t('English: C D E F G A B, B♭')], ['de', t('German: C D E F G A H, B')]], UI.prefs.names, v => UI.setPref('names', v));
   const soundVal = () => UI.prefs.sound ? (UI.prefs.feedback ? 'all' : 'music') : 'off';
-  seg('sound', [['all', 'Music and clicks'], ['music', 'Music only'], ['off', 'Off']], soundVal(), v => {
+  seg('sound', [['all', t('Music and clicks')], ['music', t('Music only')], ['off', t('Off')]], soundVal(), v => {
     UI.setPref('sound', v !== 'off');
     UI.setPref('feedback', v === 'all');
   });
@@ -148,16 +153,16 @@
     if (!f) return;
     try {
       UI.importData(JSON.parse(await f.text()));
-      alert('Progress loaded.');
+      alert(t('Progress loaded.'));
       location.reload();
-    } catch (err) { alert('That file could not be read: ' + err.message); }
+    } catch (err) { alert(t('That file could not be read:') + ' ' + err.message); }
   };
 
   const midi = $('#midi');
   Input.onStatus(({ state, devices }) => {
     midi.dataset.state = state;
     midi.querySelector('.midi-text').textContent = state === 'ready' ? devices.join(', ')
-      : state === 'none' ? 'No MIDI keyboard' : state === 'unsupported' ? 'No MIDI in this browser' : state === 'denied' ? 'MIDI blocked' : 'MIDI';
+      : state === 'none' ? t('No MIDI keyboard') : state === 'unsupported' ? t('No MIDI in this browser') : state === 'denied' ? t('MIDI blocked') : 'MIDI';
   });
   midi.onclick = () => Input.init();
   Input.init();

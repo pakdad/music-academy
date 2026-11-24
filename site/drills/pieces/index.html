@@ -8,11 +8,13 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
 <title>Pieces</title>
 </head>
 <body>
 <div id="app"></div>
-<script src="/shared/edition.js"></script>
 <script src="/shared/theory.js"></script>
 <script src="/shared/glyphs.js"></script>
 <script src="/shared/staff.js"></script>
@@ -32,10 +34,10 @@
 (() => {
   const T = Theory;
   const { h } = UI;
-  const page = UI.page({ drill: 'pieces', title: 'Pieces', hud: false, tools: ['midi', 'sound', 'keyboard'], keyboard: { lo: 36, hi: 84 }, onSettings() {} });
+  const page = UI.page({ drill: 'pieces', title: t('Pieces'), hud: false, tools: ['midi', 'sound', 'keyboard'], keyboard: { lo: 36, hi: 84 }, onSettings() {} });
   const stage = page.el.prompt.parentElement;
-  const HANDS = { rh: 'Right hand', lh: 'Left hand', both: 'Both hands' };
-  const LEVELS = { 1: 'Level 1 · one hand', 2: 'Level 2 · both hands, simple', 3: 'Level 3 · both hands, more going on' };
+  const HANDS = { rh: t('Right hand'), lh: t('Left hand'), both: t('Both hands') };
+  const LEVELS = { 1: t('Level 1 · one hand'), 2: t('Level 2 · both hands, simple'), 3: t('Level 3 · both hands, more going on') };
 
   const prefsKey = 'pieces:settings';
   const settings = Object.assign({ mode: 'wait', metronome: true, accomp: true, fingering: false }, UI.store.get(prefsKey, {}));
@@ -43,20 +45,20 @@
   const pieceSettings = p => Object.assign({ bpm: p.tempo, hands: p.rh && p.lh ? 'both' : p.rh ? 'rh' : 'lh' }, UI.store.get('pieces:piece:' + p.id, {}));
   const best = () => UI.store.get('pieces:best', {});
 
-  const keyName = p => UI.keyName({ fifths: p.key || 0, minor: /minor/i.test(p.title) });
-  const handsOf = p => p.rh && p.lh ? 'both hands' : p.rh ? 'right hand' : 'left hand';
+  const keyName = p => UI.keyName({ fifths: p.key || 0, minor: !!p.minor });
+  const handsOf = p => p.rh && p.lh ? t('both hands') : p.rh ? t('right hand') : t('left hand');
 
   // ---------- the library ----------
   function library() {
     stop();
-    document.title = `Pieces · ${(self.EDITION || {}).name || 'Music Academy'}`;
+    document.title = `${t('Pieces')} · ${(self.EDITION || {}).name || 'Music Academy'}`;
     stage.className = 'stage wide';
     stage.innerHTML = '';
     const b = best();
     stage.append(h('div', { class: 'lib-intro' },
-      h('h2', {}, 'Pieces'),
-      h('p', { class: 'muted' }, 'Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.'),
-      h('p', { class: 'muted' }, 'The classics are public domain; for the full original scores, each links to IMSLP, the Petrucci Music Library. Finger numbers can be switched on in every piece.')));
+      h('h2', {}, t('Pieces')),
+      h('p', { class: 'muted' }, t('Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.')),
+      h('p', { class: 'muted' }, t('The classics are public domain; for the full original scores, each links to IMSLP, the Petrucci Music Library. Finger numbers can be switched on in every piece.'))));
     for (const level of [1, 2, 3]) {
       const ps = PIECES.filter(p => p.level === level);
       if (!ps.length) continue;
@@ -64,11 +66,11 @@
       stage.append(h('div', { class: 'lib-grid' }, ps.map(p => {
         const scores = Object.entries(b).filter(([k]) => k.startsWith(p.id + ':')).map(([, v]) => v.score);
         return h('a', { class: 'pcard', href: '#' + p.id },
-          h('div', { class: 'pcard-title' }, p.title),
-          h('div', { class: 'pcard-by' }, p.by),
+          h('div', { class: 'pcard-title' }, tr(p, 'title')),
+          h('div', { class: 'pcard-by' }, tr(p, 'by')),
           h('div', { class: 'pcard-meta' }, `${keyName(p)} · ${p.time.join('/')} · ${handsOf(p)} · ♩ = ${p.tempo}`),
-          h('p', {}, p.about),
-          h('div', { class: 'pcard-best' }, scores.length ? `Best: ${Math.max(...scores)} %` : ''));
+          h('p', {}, tr(p, 'about')),
+          h('div', { class: 'pcard-best' }, scores.length ? t('Best: {n} %', { n: Math.max(...scores) }) : ''));
       })));
     }
   }
@@ -83,13 +85,13 @@
     if (!P) return library();
     PS = pieceSettings(P);
     if (!(P.rh && P.lh)) PS.hands = P.rh ? 'rh' : 'lh';
-    document.title = `${P.title} · ${(self.EDITION || {}).name || 'Music Academy'}`;
+    document.title = `${tr(P, 'title')} · ${(self.EDITION || {}).name || 'Music Academy'}`;
     stage.className = 'stage wide';
     stage.innerHTML = '';
     els.status = h('div', { class: 'pstatus' });
     els.score = h('div', { class: 'card score-card' });
     els.result = h('div', { class: 'presult' });
-    els.start = h('button', { class: 'btn primary big', onclick: () => run ? stop(true) : start() }, '▶ Start');
+    els.start = h('button', { class: 'btn primary big', onclick: () => run ? stop(true) : start() }, '▶ ' + t('Start'));
     els.tempoOut = h('span', { class: 'num' });
     const tempo = h('input', { type: 'range', min: 30, max: 200, value: PS.bpm, oninput: e => { PS.bpm = +e.target.value; tempoLabel(); savePiece(); } });
     const tempoLabel = () => { els.tempoOut.textContent = `♩ = ${PS.bpm}` + (PS.bpm !== P.tempo ? ` (${Math.round(PS.bpm / P.tempo * 100)} %)` : ''); };
@@ -105,18 +107,18 @@
 
     stage.append(
       h('div', { class: 'phead' },
-        h('a', { class: 'back', href: '#' }, '‹ All pieces'),
-        h('h2', {}, P.title),
-        h('div', { class: 'muted' }, P.by),
+        h('a', { class: 'back', href: '#' }, '‹ ' + t('All pieces')),
+        h('h2', {}, tr(P, 'title')),
+        h('div', { class: 'muted' }, tr(P, 'by')),
         h('div', { class: 'pcard-meta' }, `${keyName(P)} · ${P.time.join('/')} · ${handsOf(P)}`),
-        h('p', { class: 'pabout' }, P.about),
-        P.imslp ? h('a', { class: 'imslp', href: P.imslp, target: '_blank', rel: 'noopener' }, 'Full original score on IMSLP ↗') : null),
+        h('p', { class: 'pabout' }, tr(P, 'about')),
+        P.imslp ? h('a', { class: 'imslp', href: P.imslp, target: '_blank', rel: 'noopener' }, t('Full original score on IMSLP') + ' ↗') : null),
       h('div', { class: 'controls' },
-        h('div', { class: 'ctl' }, h('span', {}, 'Mode'), seg([['wait', 'Wait for me'], ['play', 'Play along'], ['listen', 'Listen']], settings.mode, v => { settings.mode = v; saveSettings(); refreshControls(); })),
-        P.rh && P.lh ? h('div', { class: 'ctl' }, h('span', {}, 'Hands'), seg(Object.entries(HANDS), PS.hands, v => { PS.hands = v; savePiece(); render(); refreshControls(); })) : null,
-        h('div', { class: 'ctl tempo' }, h('span', {}, 'Tempo'), tempo, els.tempoOut),
-        els.toggles = h('div', { class: 'ctl toggles' }, toggle('fingering', 'Finger numbers', () => { if (!run) render(); }), toggle('metronome', 'Metronome'),
-          els.accomp = toggle('accomp', 'Play the other hand for me')),
+        h('div', { class: 'ctl' }, h('span', {}, t('Mode')), seg([['wait', t('Wait for me')], ['play', t('Play along')], ['listen', t('Listen')]], settings.mode, v => { settings.mode = v; saveSettings(); refreshControls(); })),
+        P.rh && P.lh ? h('div', { class: 'ctl' }, h('span', {}, t('Hands')), seg(Object.entries(HANDS), PS.hands, v => { PS.hands = v; savePiece(); render(); refreshControls(); })) : null,
+        h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, els.tempoOut),
+        els.toggles = h('div', { class: 'ctl toggles' }, toggle('fingering', t('Finger numbers'), () => { if (!run) render(); }), toggle('metronome', t('Metronome')),
+          els.accomp = toggle('accomp', t('Play the other hand for me'))),
         h('div', { class: 'ctl go' }, els.start, els.status)),
       els.score, els.result);
     refreshControls();
@@ -127,7 +129,7 @@
   function savePiece() { UI.store.set('pieces:piece:' + P.id, { bpm: PS.bpm, hands: PS.hands }); }
   function refreshControls() {
     els.accomp.style.display = P.rh && P.lh && PS.hands !== 'both' && settings.mode !== 'listen' ? '' : 'none';
-    els.status.textContent = { wait: 'Play each note when it lights up; the score waits for you.', play: 'Count in, then play along. Every note is judged for pitch and timing.', listen: 'Hear it played, with the playhead.' }[settings.mode];
+    els.status.textContent = { wait: t('Play each note when it lights up; the score waits for you.'), play: t('Count in, then play along. Every note is judged for pitch and timing.'), listen: t('Hear it played, with the playhead.') }[settings.mode];
   }
 
   function render() {
@@ -162,7 +164,7 @@
     render();
     els.result.innerHTML = '';
     page.kb.clear();
-    els.start.textContent = '■ Stop';
+    els.start.textContent = '■ ' + t('Stop');
     if (settings.mode === 'wait') startWait();
     else startTimed(settings.mode === 'listen');
   }
@@ -172,9 +174,9 @@
     cancelAnimationFrame(run.raf);
     const r = run;
     run = null;
-    if (els.start) els.start.textContent = '▶ Start';
+    if (els.start) els.start.textContent = '▶ ' + t('Start');
     if (els.ph) els.ph.classList.remove('on');
-    if (byUser && r.mode !== 'listen') els.result.innerHTML = '<p class="muted">Stopped. Start again when you are ready.</p>';
+    if (byUser && r.mode !== 'listen') els.result.innerHTML = `<p class="muted">${t('Stopped. Start again when you are ready.')}</p>`;
   }
 
   // wait for me: the next notes light up; play them (any order, all of them), then it moves on
@@ -222,10 +224,10 @@
     stop();
     els.result.innerHTML = '';
     els.result.append(resultBox(score, [
-      `${r.clean} of ${r.steps.length} steps without a slip`,
-      `${r.wrong} wrong note${r.wrong === 1 ? '' : 's'}`,
-      `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, '0')} minutes`,
-    ], score >= 90 ? 'Ready for “Play along”.' : 'Again, until it flows.'));
+      t('{a} of {b} steps without a slip', { a: r.clean, b: r.steps.length }),
+      wrongNotes(r.wrong),
+      t('{time} minutes', { time: `${Math.floor(secs / 60)}:${String(Math.round(secs % 60)).padStart(2, '0')}` }),
+    ], score >= 90 ? t('Ready for “Play along”.') : t('Again, until it flows.')));
     saveBest('wait', score);
   }
 
@@ -271,7 +273,7 @@
         els.status.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span>`;
         els.ph.classList.remove('on');
       } else {
-        els.status.textContent = `Bar ${Math.min(L.bars, Math.floor(b / L.L) + 1)} of ${L.bars}`;
+        els.status.textContent = t('Bar {a} of {b}', { a: Math.min(L.bars, Math.floor(b / L.L) + 1), b: L.bars });
         playheadAt(b);
         if (listen) for (const e of L.events) if (!e.rest) {
           const on = b >= e.t && b < e.t + e.d;
@@ -315,30 +317,31 @@
     const mean = hit ? r.offsets.reduce((a, b) => a + b, 0) / hit : 0;
     const sd = hit > 1 ? Math.sqrt(r.offsets.reduce((a, o) => a + (o - mean) ** 2, 0) / (hit - 1)) : 0;
     const score = Math.max(0, Math.round((onTime + 0.6 * (hit - onTime)) / total * 100 - r.wrong));
-    const lean = Math.abs(mean) < 12 ? 'right on the beat' : mean > 0 ? `${Math.round(mean)} ms late on average (dragging)` : `${Math.round(-mean)} ms early on average (rushing)`;
+    const lean = Math.abs(mean) < 12 ? t('right on the beat') : mean > 0 ? t('{n} ms late on average (dragging)', { n: Math.round(mean) }) : t('{n} ms early on average (rushing)', { n: Math.round(-mean) });
     els.result.innerHTML = '';
     els.result.append(resultBox(score, [
-      `${hit} of ${total} notes played (${Math.round(hit / total * 100)} %)`,
-      `${onTime} on time (within ±${Math.round(r.good)} ms)`,
-      hit ? `${lean}, spread ±${Math.round(sd)} ms` : '',
-      `${r.wrong} wrong note${r.wrong === 1 ? '' : 's'}`,
+      t('{a} of {b} notes played ({p} %)', { a: hit, b: total, p: Math.round(hit / total * 100) }),
+      t('{n} on time (within ±{ms} ms)', { n: onTime, ms: Math.round(r.good) }),
+      hit ? t('{lean}, spread ±{ms} ms', { lean, ms: Math.round(sd) }) : '',
+      wrongNotes(r.wrong),
     ].filter(Boolean), advice(score, onTime === total && !r.wrong)));
     saveBest(`play@${PS.bpm}`, score);
   }
   function advice(score, clean) {
     const fast = PS.bpm >= P.tempo;
-    if (clean) return fast ? 'Clean at full tempo. Next piece?' : 'Clean: try it a little faster.';
-    if (score >= 90) return 'Very good, with a slip or two. Once more?';
-    if (score >= 60) return 'Getting there: once more, or a little slower.';
-    return 'Slow it down (tempo slider) or use “Wait for me” first.';
+    if (clean) return fast ? t('Clean at full tempo. Next piece?') : t('Clean: try it a little faster.');
+    if (score >= 90) return t('Very good, with a slip or two. Once more?');
+    if (score >= 60) return t('Getting there: once more, or a little slower.');
+    return t('Slow it down (tempo slider) or use “Wait for me” first.');
   }
   function resultBox(score, lines, advice) {
     return h('div', { class: 'card result-card' },
       h('div', { class: 'big-score' }, score + ' %'),
       h('ul', {}, lines.map(l => h('li', {}, l))),
       h('p', { class: 'advice' }, advice),
-      h('button', { class: 'btn primary', onclick: () => start() }, '↻ Again'));
+      h('button', { class: 'btn primary', onclick: () => start() }, '↻ ' + t('Again')));
   }
+  function wrongNotes(n) { return n === 1 ? t('1 wrong note') : t('{n} wrong notes', { n }); }
   function saveBest(kind, score) {
     const b = best();
     const k = `${P.id}:${PS.hands}:${kind}`;

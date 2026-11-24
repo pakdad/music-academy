@@ -8,11 +8,13 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
 <title>Progressions</title>
 </head>
 <body>
 <div id="app"></div>
-<script src="/shared/edition.js"></script>
 <script src="/shared/theory.js"></script>
 <script src="/shared/glyphs.js"></script>
 <script src="/shared/staff.js"></script>
@@ -29,19 +31,19 @@
   const T = Theory;
   const GOOD = '#2f7d4f', BAD = '#be123c';
   const SPEC = [
-    { id: 'mode', label: 'Drill', type: 'choice', options: [['read', 'Read it: key and chords'], ['hear', 'Hear it: which progression?'], ['play', 'Play it in a key']] },
-    { id: 'tonality', label: 'Keys', type: 'choice', options: [['major', 'Major'], ['minor', 'Minor'], ['both', 'Both']] },
-    { id: 'maxKey', label: 'Signatures', type: 'number', min: 0, max: 7, format: v => v ? `up to ${v} ♯ or ♭` : 'C major / A minor only' },
+    { id: 'mode', label: t('Drill'), type: 'choice', options: [['read', t('Read it: key and chords')], ['hear', t('Hear it: which progression?')], ['play', t('Play it in a key')]] },
+    { id: 'tonality', label: t('Keys'), type: 'choice', options: [['major', t('Major')], ['minor', t('Minor')], ['both', t('Both')]] },
+    { id: 'maxKey', label: t('Signatures'), type: 'number', min: 0, max: 7, format: v => v ? t('up to {n} ♯ or ♭', { n: v }) : t('C major / A minor only') },
   ];
   const DEFAULTS = { mode: 'read', tonality: 'major', maxKey: 3 };
 
   const page = UI.page({
-    drill: 'progressions', title: 'Progressions', settings: SPEC, defaults: DEFAULTS,
+    drill: 'progressions', title: t('Progressions'), settings: SPEC, defaults: DEFAULTS,
     describe: item => {
       const p = item.split(':');
-      if (p[0] === 'key') return `Finding the key: ${UI.keyName({ fifths: parseInt(p[1]), minor: p[1].endsWith('m') })}`;
-      if (p[0] === 'hear') return `Hearing ${T.PROGRESSIONS.find(x => x.id === p[1]).chords.join('–')}`;
-      return `${p[2]} in ${p[1] === 'm' ? 'minor' : 'major'}${p[0] === 'play' ? ' (playing)' : ''}`;
+      if (p[0] === 'key') return t('Finding the key: {key}', { key: UI.keyName({ fifths: parseInt(p[1]), minor: p[1].endsWith('m') }) });
+      if (p[0] === 'hear') return t('Hearing {chords}', { chords: T.PROGRESSIONS.find(x => x.id === p[1]).chords.join('–') });
+      return `${p[2]} ${p[1] === 'm' ? t('in minor') : t('in major')}${p[0] === 'play' ? ' (' + t('playing') + ')' : ''}`;
     },
     onSettings: () => start(), keyboard: { lo: 36, hi: 84 },
   });
@@ -104,7 +106,7 @@
     const item = `key:${q.key.fifths}${q.key.minor ? 'm' : 'M'}`;
     q.item = item;
     draw();
-    page.el.prompt.innerHTML = 'What key is this in?<small>The signature gives two choices: the chords decide</small>';
+    page.el.prompt.innerHTML = t('What key is this in?') + '<small>' + t('The signature gives two choices: the chords decide') + '</small>';
     const k = q.key;
     const cands = [
       { fifths: k.fifths, minor: !k.minor },                      // the relative key (same signature)
@@ -136,10 +138,10 @@
     const rel = UI.keyName({ fifths: k.fifths, minor: !k.minor });
     if (k.minor) {
       const lt = T.transpose(T.keyTonic(k.fifths, true), 6, 11);
-      return `It's <b>${UI.keyName(k)}</b>, not ${rel}: the chords start and end on ${UI.noteName(T.keyTonic(k.fifths, true))}` +
-        (q.prog.chords.includes('V') ? `, and the ${UI.noteName(lt)} (raised 7th) gives the minor key away.` : '.');
+      return t('It\'s <b>{key}</b>, not {rel}: the chords start and end on {tonic}', { key: UI.keyName(k), rel, tonic: UI.noteName(T.keyTonic(k.fifths, true)) }) +
+        (q.prog.chords.includes('V') ? t(', and the {note} (raised 7th) gives the minor key away.', { note: UI.noteName(lt) }) : '.');
     }
-    return `It's <b>${UI.keyName(k)}</b>, not ${rel}: the chords lean on ${UI.noteName(T.keyTonic(k.fifths, false))} major and there's no raised 7th of the minor.`;
+    return t('It\'s <b>{key}</b>, not {rel}: the chords lean on {major} and there\'s no raised 7th of the minor.', { key: UI.keyName(k), rel, major: UI.keyName({ fifths: k.fifths, minor: false }) });
   }
 
   function askBar(i) {
@@ -151,7 +153,7 @@
     const item = `rn:${q.key.minor ? 'm' : 'M'}:${c.numeral}`;
     q.item = item;
     draw();
-    page.el.prompt.innerHTML = `Bar ${i + 1}: which chord?<small>in ${UI.keyName(q.key)}</small>`;
+    page.el.prompt.innerHTML = t('Bar {n}: which chord?', { n: i + 1 }) + `<small>${t('in {key}', { key: UI.keyName(q.key) })}</small>`;
     const numerals = T.diatonic(q.key);
     page.ask(item);
     page.choices(numerals.map(n => ({ label: n, value: n, sub: UI.chordName(T.romanChord(q.key, n).root, T.romanChord(q.key, n).type) })), (n, btn) => {
@@ -165,7 +167,7 @@
         btn.classList.add('wrong');
         if (!q.missed) page.answer(false, { item });
         q.missed = true;
-        page.flash(false, `It's <b>${c.numeral}</b>: ${c.name} (${c.notes.map(n => UI.noteName(n)).join(' – ')})`);
+        page.flash(false, t('It\'s <b>{numeral}</b>: {chord} ({notes})', { numeral: c.numeral, chord: c.name, notes: c.notes.map(n => UI.noteName(n)).join(' – ') }));
       }
     }, { columns: numerals.length > 7 ? 5 : 7 });
     // hide the chord names under the buttons: they'd give it away. Shown after answering.
@@ -177,11 +179,11 @@
     q.bar = -1;
     draw({ labels: true });
     page.clearChoices();
-    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${q.prog.name}</small>`;
+    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${t(q.prog.name)}</small>`;
     page.flash(true, '');
     const row = UI.h('div', { class: 'row' },
-      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ Listen'),
-      UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›'));
+      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ ' + t('Listen')),
+      UI.h('button', { class: 'btn primary', onclick: () => next() }, t('Next') + ' ›'));
     page.el.answers.append(row);
     listen();
   }
@@ -199,10 +201,10 @@
   // ---------- hear ----------
   function askHear(pool) {
     page.el.card.innerHTML = '';
-    page.el.prompt.innerHTML = 'Which progression is this?<small>Hear where it rests and where it pulls</small>';
-    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, UI.h('button', { class: 'btn', onclick: () => listen(false) }, '▶ Play again')));
+    page.el.prompt.innerHTML = t('Which progression is this?') + '<small>' + t('Hear where it rests and where it pulls') + '</small>';
+    page.el.prompt.append(UI.h('div', { class: 'row', style: 'margin-top:10px' }, UI.h('button', { class: 'btn', onclick: () => listen(false) }, '▶ ' + t('Play again'))));
     const others = UI.shuffle(pool.filter(p => p.id !== q.prog.id)).slice(0, 3);
-    const opts = UI.shuffle([q.prog, ...others]).map(p => ({ label: p.chords.join(' – '), sub: p.name, value: p.id }));
+    const opts = UI.shuffle([q.prog, ...others]).map(p => ({ label: p.chords.join(' – '), sub: t(p.name), value: p.id }));
     page.ask(q.item);
     page.choices(opts, (id, btn) => {
       if (wait) return;
@@ -210,14 +212,14 @@
         btn.classList.add('right');
         if (!q.missed) page.answer(true);
         wait = true;
-        page.flash(true, `${q.prog.chords.join(' – ')} in ${UI.keyName(q.key)}`);
+        page.flash(true, `${q.prog.chords.join(' – ')} · ${UI.keyName(q.key)}`);
         draw({ labels: true });
-        page.el.answers.append(UI.h('div', { class: 'row' }, UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›')));
+        page.el.answers.append(UI.h('div', { class: 'row' }, UI.h('button', { class: 'btn primary', onclick: () => next() }, t('Next') + ' ›')));
       } else {
         btn.classList.add('wrong');
         if (!q.missed) page.answer(false);
         q.missed = true;
-        page.flash(false, 'Not that one. Listen again: is the first chord home? Where does it land?');
+        page.flash(false, t('Not that one. Listen again: is the first chord home? Where does it land?'));
       }
     }, { columns: 2 });
     setTimeout(() => listen(false), 300);
@@ -230,7 +232,7 @@
     q.item = `play:${q.key.minor ? 'm' : 'M'}:${c.numeral}`;
     q.missed = false;
     const chips = q.chords.map((x, j) => `<span style="${j === i ? 'color:var(--accent);text-decoration:underline' : j < i ? 'color:var(--good)' : ''}">${x.numeral}</span>`).join(' – ');
-    page.el.prompt.innerHTML = `In <b>${UI.keyName(q.key)}</b>, play ${chips}<small>any voicing, any octave</small>`;
+    page.el.prompt.innerHTML = t('In <b>{key}</b>, play {chips}', { key: UI.keyName(q.key), chips }) + `<small>${t('any voicing, any octave')}</small>`;
     page.el.card.innerHTML = '';
     page.ask(q.item);
     chordIn.expect(c.notes.map(T.midi));
@@ -243,7 +245,7 @@
       if (!q.missed) page.answer(false);
       q.missed = true;
       c.notes.forEach(n => page.kb.mark(T.midi(n) + 12, 'hint'));
-      page.flash(false, `${c.numeral} in ${UI.keyName(q.key)} is <b>${c.name}</b>: ${c.notes.map(n => UI.noteName(n)).join(' – ')}`);
+      page.flash(false, t('{numeral} in {key} is <b>{chord}</b>: {notes}', { numeral: c.numeral, key: UI.keyName(q.key), chord: c.name, notes: c.notes.map(n => UI.noteName(n)).join(' – ') }));
       return;
     }
     if (!q.missed) page.answer(true);
@@ -253,11 +255,11 @@
     wait = true;
     q.bar = -1;
     draw({ labels: true });
-    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${q.prog.name}</small>`;
-    page.flash(true, 'Done. Here it is written out.');
+    page.el.prompt.innerHTML = `${UI.keyName(q.key)}: ${q.prog.chords.join(' – ')}<small>${t(q.prog.name)}</small>`;
+    page.flash(true, t('Done. Here it is written out.'));
     page.el.answers.append(UI.h('div', { class: 'row' },
-      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ Listen'),
-      UI.h('button', { class: 'btn primary', onclick: () => next() }, 'Next ›')));
+      UI.h('button', { class: 'btn', onclick: () => listen() }, '▶ ' + t('Listen')),
+      UI.h('button', { class: 'btn primary', onclick: () => next() }, t('Next') + ' ›')));
   }
 
   // Enter / space = next, when a round is finished

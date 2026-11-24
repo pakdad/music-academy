@@ -8,11 +8,13 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
 <title>Note reading</title>
 </head>
 <body>
 <div id="app"></div>
-<script src="/shared/edition.js"></script>
 <script src="/shared/theory.js"></script>
 <script src="/shared/glyphs.js"></script>
 <script src="/shared/staff.js"></script>
@@ -28,20 +30,20 @@
   const GOOD = '#2f7d4f', BAD = '#be123c';
 
   const SPEC = [
-    { id: 'clef', label: 'Clef', type: 'choice', options: [['treble', 'Treble (G clef)'], ['bass', 'Bass (F clef)'], ['grand', 'Both (grand staff)']] },
-    { id: 'ledgers', label: 'Ledger lines', type: 'number', min: 0, max: 4, format: v => v ? `up to ${v} above and below` : 'none: only on the staff' },
-    { id: 'acc', label: 'Sharps and flats', type: 'choice', options: [['none', 'None'], ['some', 'Some ♯ and ♭'], ['key', 'From a key signature']],
-      hint: 'With a key signature, the notes follow it: read the signature, then the note.' },
-    { id: 'maxKey', label: 'Key signatures', type: 'number', min: 1, max: 7, format: v => `up to ${v} ♯ or ♭`, show: s => s.acc === 'key' },
-    { id: 'answer', label: 'Answer by', type: 'choice', options: [['keys', 'Playing the key'], ['names', 'Naming the note']],
-      hint: 'Playing (MIDI or on-screen) must be the exact key, in the right octave. Naming asks for the name only; on a computer type it: C … B, Shift = ♯, Alt = ♭.' },
-    { id: 'count', label: 'Notes per card', type: 'choice', options: [[1, '1'], [4, '4'], [8, '8']], hint: 'More notes: read ahead and play them left to right.' },
+    { id: 'clef', label: t('Clef'), type: 'choice', options: [['treble', t('Treble (G clef)')], ['bass', t('Bass (F clef)')], ['grand', t('Both (grand staff)')]] },
+    { id: 'ledgers', label: t('Ledger lines'), type: 'number', min: 0, max: 4, format: v => v ? t('up to {n} above and below', { n: v }) : t('none: only on the staff') },
+    { id: 'acc', label: t('Sharps and flats'), type: 'choice', options: [['none', t('None')], ['some', t('Some ♯ and ♭')], ['key', t('From a key signature')]],
+      hint: t('With a key signature, the notes follow it: read the signature, then the note.') },
+    { id: 'maxKey', label: t('Key signatures'), type: 'number', min: 1, max: 7, format: v => t('up to {n} ♯ or ♭', { n: v }), show: s => s.acc === 'key' },
+    { id: 'answer', label: t('Answer by'), type: 'choice', options: [['keys', t('Playing the key')], ['names', t('Naming the note')]],
+      hint: t('Playing (MIDI or on-screen) must be the exact key, in the right octave. Naming asks for the name only; on a computer type it: C … B, Shift = ♯, Alt = ♭.') },
+    { id: 'count', label: t('Notes per card'), type: 'choice', options: [[1, '1'], [4, '4'], [8, '8']], hint: t('More notes: read ahead and play them left to right.') },
   ];
   const DEFAULTS = { clef: 'treble', ledgers: 2, acc: 'none', maxKey: 4, answer: 'keys', count: 1 };
 
   const page = UI.page({
-    drill: 'note-reading', title: 'Note reading', settings: SPEC, defaults: DEFAULTS,
-    describe: item => { const [staff, nm] = item.split(':'); return `${UI.noteName(T.parse(nm), { octave: true })} · ${staff}`; },
+    drill: 'note-reading', title: t('Note reading'), settings: SPEC, defaults: DEFAULTS,
+    describe: item => { const [staff, nm] = item.split(':'); return `${UI.noteName(T.parse(nm), { octave: true })} · ${t(staff)}`; },
     onSettings: () => start(), onKey, keyboard: { lo: 48, hi: 84 },
   });
 
@@ -83,8 +85,8 @@
       notes: picked.map(item => { const [staff, nm] = item.split(':'); return { item, n: { ...T.parse(nm), staff }, missed: false, done: false }; }),
     };
     page.el.prompt.innerHTML = S.answer === 'names'
-      ? (S.count > 1 ? 'Name these notes, left to right' : 'Name this note')
-      : (S.count > 1 ? 'Play these notes, left to right' : 'Play this note');
+      ? (S.count > 1 ? t('Name these notes, left to right') : t('Name this note'))
+      : (S.count > 1 ? t('Play these notes, left to right') : t('Play this note'));
     page.clearFlash();
     page.kb.clear();
     draw();
@@ -136,15 +138,15 @@
     const played = T.spell(e.midi, card.key);
     const sameName = T.pc(played) === T.pc(cur.n);
     answer(false, sameName
-      ? `Right note, wrong octave: you played ${UI.noteName(played, { octave: true })}, this is ${UI.noteName(cur.n, { octave: true })}`
-      : `You played ${UI.noteName(played, { octave: true })}. This is <b>${UI.noteName(cur.n, { octave: true })}</b>`);
+      ? t('Right note, wrong octave: you played {a}, this is {b}', { a: UI.noteName(played, { octave: true }), b: UI.noteName(cur.n, { octave: true }) })
+      : t('You played {a}. This is <b>{b}</b>', { a: UI.noteName(played, { octave: true }), b: UI.noteName(cur.n, { octave: true }) }));
   });
 
   function named(step, alter) {
     if (!card || wait) return;
     const cur = card.notes[card.i];
     if (cur.n.step === step && cur.n.alter === alter) return answer(true);
-    answer(false, `Not ${UI.noteName({ step, alter, octave: 4 })}. This is <b>${UI.noteName(cur.n, { octave: true })}</b>`);
+    answer(false, t('Not {a}. This is <b>{b}</b>', { a: UI.noteName({ step, alter, octave: 4 }), b: UI.noteName(cur.n, { octave: true }) }));
   }
 
   function nameButtons() {

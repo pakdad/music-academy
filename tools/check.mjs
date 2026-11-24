@@ -179,6 +179,38 @@ for (const p of ctx.self.PIECES) {
   }
 }
 
+// ---------- German: every text the pages show has a translation ----------
+{
+  const de = { self: {} };
+  vm.createContext(de);
+  vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', 'i18n-de.js'), 'utf8'), de, { filename: 'i18n-de.js' });
+  const DE = de.self.I18N_DE || {};
+  const keys = new Map(); // key -> where
+  const walkAll = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory() ? walkAll(path.join(dir, d.name)) : [path.join(dir, d.name)]);
+  for (const f of walkAll(SITE).filter(f => /\.(html|js)$/.test(f) && !/i18n(-de)?\.js$/.test(f))) {
+    const src = fs.readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?<![\w.])t\(\s*'((?:[^'\\]|\\.)*)'/g)) keys.set(m[1].replace(/\\'/g, "'"), path.relative(SITE, f));
+    for (const m of src.matchAll(/data-t>([^<]+)</g)) keys.set(m[1].trim(), path.relative(SITE, f));
+  }
+  // texts looked up by value rather than written as t('…')
+  for (const c of Object.values(T.CHORDS)) keys.set(c.name, 'theory.js chords');
+  for (const sc of Object.values(T.SCALES)) keys.set(sc.name, 'theory.js scales');
+  for (const pr of T.PROGRESSIONS) keys.set(pr.name, 'theory.js progressions');
+  for (const k of ['treble', 'bass', '1st inversion', '2nd inversion', '3rd inversion', 'Piano', 'Guitar']) keys.set(k, 'dynamic');
+  const ph = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',');
+  let missing = 0;
+  for (const [k, where] of keys) {
+    if (DE[k] === undefined) { missing++; failed++; console.error(`✗ no German for ${JSON.stringify(k)} (${where})`); }
+    else if (ph(k) !== ph(DE[k])) { failed++; console.error(`✗ German for ${JSON.stringify(k)} has other placeholders: ${JSON.stringify(DE[k])}`); }
+    else passed++;
+  }
+  const unused = Object.keys(DE).filter(k => !keys.has(k));
+  if (unused.length) console.warn(`! ${unused.length} German texts no page uses: ${unused.slice(0, 8).map(k => JSON.stringify(k)).join(', ')}${unused.length > 8 ? ' …' : ''}`);
+  // every piece and drill has its German texts
+  for (const p of ctx.self.PIECES) if (!p.de || !p.de.title || !p.de.about || !p.de.by) { failed++; console.error(`✗ piece ${p.id}: no German title/by/about`); }
+  for (const d of ctx.self.DRILLS) if (!d.de || !d.de.name || !d.de.about) { failed++; console.error(`✗ drill ${d.id}: no German name/about`); }
+}
+
 // ---------- pages ----------
 const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
 let scripts = 0;

@@ -8,11 +8,13 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
 <title>Rhythm</title>
 </head>
 <body>
 <div id="app"></div>
-<script src="/shared/edition.js"></script>
 <script src="/shared/theory.js"></script>
 <script src="/shared/glyphs.js"></script>
 <script src="/shared/staff.js"></script>
@@ -30,33 +32,33 @@
   const { h } = UI;
   // a cell fills whole beats; at: where in the bar it may start (beats), so beaming and reading stay conventional
   const CELLS = [
-    { id: 'q',    level: 1, len: 1, tokens: 'B4:4',              name: 'quarter note' },
-    { id: 'h',    level: 1, len: 2, tokens: 'B4:2',              name: 'half note', even: true },
-    { id: 'w',    level: 1, len: 4, tokens: 'B4:1',              name: 'whole note', whole: true },
-    { id: 'qr',   level: 1, len: 1, tokens: 'r:4',               name: 'quarter rest', rest: true },
-    { id: 'hd',   level: 1, len: 3, tokens: 'B4:2.',             name: 'dotted half note', first: true },
-    { id: 'ee',   level: 2, len: 1, tokens: 'B4:8 B4',           name: 'two eighths' },
-    { id: 'dqe',  level: 3, len: 2, tokens: 'B4:4. B4:8',        name: 'dotted quarter + eighth', even: true },
-    { id: 'eqe',  level: 4, len: 2, tokens: 'B4:8 B4:4 B4:8',    name: 'syncopation: eighth, quarter, eighth', even: true },
-    { id: 're',   level: 4, len: 1, tokens: 'r:8 B4:8',          name: 'eighth rest + eighth (off-beat)' },
-    { id: 'er',   level: 4, len: 1, tokens: 'B4:8 r:8',          name: 'eighth + eighth rest' },
-    { id: 'ssss', level: 5, len: 1, tokens: 'B4:16 B4 B4 B4',    name: 'four sixteenths' },
-    { id: 'ess',  level: 5, len: 1, tokens: 'B4:8 B4:16 B4',     name: 'eighth + two sixteenths' },
-    { id: 'sse',  level: 5, len: 1, tokens: 'B4:16 B4 B4:8',     name: 'two sixteenths + eighth' },
-    { id: 'des',  level: 5, len: 1, tokens: 'B4:8. B4:16',       name: 'dotted eighth + sixteenth' },
+    { id: 'q',    level: 1, len: 1, tokens: 'B4:4',              name: t('quarter note') },
+    { id: 'h',    level: 1, len: 2, tokens: 'B4:2',              name: t('half note'), even: true },
+    { id: 'w',    level: 1, len: 4, tokens: 'B4:1',              name: t('whole note'), whole: true },
+    { id: 'qr',   level: 1, len: 1, tokens: 'r:4',               name: t('quarter rest'), rest: true },
+    { id: 'hd',   level: 1, len: 3, tokens: 'B4:2.',             name: t('dotted half note'), first: true },
+    { id: 'ee',   level: 2, len: 1, tokens: 'B4:8 B4',           name: t('two eighths') },
+    { id: 'dqe',  level: 3, len: 2, tokens: 'B4:4. B4:8',        name: t('dotted quarter + eighth'), even: true },
+    { id: 'eqe',  level: 4, len: 2, tokens: 'B4:8 B4:4 B4:8',    name: t('syncopation: eighth, quarter, eighth'), even: true },
+    { id: 're',   level: 4, len: 1, tokens: 'r:8 B4:8',          name: t('eighth rest + eighth (off-beat)') },
+    { id: 'er',   level: 4, len: 1, tokens: 'B4:8 r:8',          name: t('eighth + eighth rest') },
+    { id: 'ssss', level: 5, len: 1, tokens: 'B4:16 B4 B4 B4',    name: t('four sixteenths') },
+    { id: 'ess',  level: 5, len: 1, tokens: 'B4:8 B4:16 B4',     name: t('eighth + two sixteenths') },
+    { id: 'sse',  level: 5, len: 1, tokens: 'B4:16 B4 B4:8',     name: t('two sixteenths + eighth') },
+    { id: 'des',  level: 5, len: 1, tokens: 'B4:8. B4:16',       name: t('dotted eighth + sixteenth') },
   ];
-  const LEVELS = [[1, 'Whole, half, quarter'], [2, '+ Eighths'], [3, '+ Dotted rhythms'], [4, '+ Syncopation, off-beats'], [5, '+ Sixteenths']];
+  const LEVELS = [[1, t('Whole, half, quarter')], [2, '+ ' + t('Eighths')], [3, '+ ' + t('Dotted rhythms')], [4, '+ ' + t('Syncopation, off-beats')], [5, '+ ' + t('Sixteenths')]];
   const SPEC = [
-    { id: 'level', label: 'Level', type: 'choice', options: LEVELS, hint: 'Each level adds new figures and keeps the earlier ones.' },
-    { id: 'time', label: 'Time', type: 'choice', options: [['4/4', '4/4'], ['3/4', '3/4'], ['2/4', '2/4'], ['mix', 'Mixed']] },
-    { id: 'bars', label: 'Length', type: 'choice', options: [[2, '2 bars'], [4, '4 bars']] },
-    { id: 'bpm', label: 'Tempo', type: 'number', min: 40, max: 160, step: 2, format: v => `♩ = ${v}` },
-    { id: 'click', label: 'Metronome while you tap', type: 'choice', options: [[true, 'On'], [false, 'Only the count-in']] },
+    { id: 'level', label: t('Level'), type: 'choice', options: LEVELS, hint: t('Each level adds new figures and keeps the earlier ones.') },
+    { id: 'time', label: t('Time signature'), type: 'choice', options: [['4/4', '4/4'], ['3/4', '3/4'], ['2/4', '2/4'], ['mix', t('Mixed')]] },
+    { id: 'bars', label: t('Length'), type: 'choice', options: [[2, t('{n} bars', { n: 2 })], [4, t('{n} bars', { n: 4 })]] },
+    { id: 'bpm', label: t('Tempo'), type: 'number', min: 40, max: 160, step: 2, format: v => `♩ = ${v}` },
+    { id: 'click', label: t('Metronome while you tap'), type: 'choice', options: [[true, t('On')], [false, t('Only the count-in')]] },
   ];
   const DEFAULTS = { level: 1, time: '4/4', bars: 2, bpm: 80, click: true };
 
   const page = UI.page({
-    drill: 'rhythm', title: 'Rhythm', settings: SPEC, defaults: DEFAULTS, hud: false, tools: ['midi', 'sound', 'keyboard', 'stats', 'settings'],
+    drill: 'rhythm', title: t('Rhythm'), settings: SPEC, defaults: DEFAULTS, hud: false, tools: ['midi', 'sound', 'keyboard', 'stats', 'settings'],
     describe: id => (CELLS.find(c => c.id === id) || {}).name || id,
     onSettings: () => next(), keyboard: { lo: 48, hi: 72, sound: false },
   });
@@ -101,14 +103,14 @@
     S = page.settings;
     ex = make();
     draw();
-    el.prompt.innerHTML = `Read it, then tap it in time<small>Any key, the pad, Space or J · ${ex.time} · ♩ = ${S.bpm}</small>`;
+    el.prompt.innerHTML = `${t('Read it, then tap it in time')}<small>${t('Any key, the pad, Space or J')} · ${ex.time} · ♩ = ${S.bpm}</small>`;
     el.feedback.className = 'feedback';
     el.answers.innerHTML = '';
     el.answers.append(
       h('div', { class: 'row' },
-        h('button', { class: 'btn', onclick: () => go(true) }, '▶ Listen'),
-        h('button', { class: 'btn primary big', onclick: () => go(false) }, '● Tap it'),
-        h('button', { class: 'btn ghost', onclick: () => next() }, 'New rhythm ›')),
+        h('button', { class: 'btn', onclick: () => go(true) }, '▶ ' + t('Listen')),
+        h('button', { class: 'btn primary big', onclick: () => go(false) }, '● ' + t('Tap it')),
+        h('button', { class: 'btn ghost', onclick: () => next() }, t('New rhythm') + ' ›')),
       pad);
   }
   function draw() {
@@ -120,7 +122,7 @@
     ex.ph = ex.svg.querySelector('.playhead');
     ex.ev = [...ex.svg.querySelectorAll('.ev')].reduce((m, g) => (m[g.dataset.i] = g, m), {});
   }
-  const pad = h('button', { class: 'pad', onpointerdown: e => { e.preventDefault(); tap(e.timeStamp || performance.now(), true); } }, 'Tap here');
+  const pad = h('button', { class: 'pad', onpointerdown: e => { e.preventDefault(); tap(e.timeStamp || performance.now(), true); } }, t('Tap here'));
 
   // ---------- listening and tapping ----------
   function go(listen) {
@@ -147,9 +149,9 @@
     const loop = () => {
       if (!run) return;
       const beat = tr.beatNow(), b = beat - countIn;
-      if (b < 0) { el.prompt.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span><small>${listen ? 'Listen…' : 'Count in, then tap'}</small>`; }
+      if (b < 0) { el.prompt.innerHTML = `<span class="countin">${Math.floor(-b) + 1}</span><small>${listen ? t('Listen…') : t('Count in, then tap')}</small>`; }
       else {
-        el.prompt.innerHTML = listen ? 'Listen…<small>&nbsp;</small>' : 'Tap!<small>&nbsp;</small>';
+        el.prompt.innerHTML = (listen ? t('Listen…') : t('Tap!')) + '<small>&nbsp;</small>';
         playhead(b);
       }
       if (!listen) {
@@ -197,7 +199,7 @@
   function finish() {
     const r = run;
     stop();
-    if (r.listen) { el.prompt.innerHTML = `Now you: tap it<small>Any key, the pad, Space or J · ${ex.time} · ♩ = ${S.bpm}</small>`; return; }
+    if (r.listen) { el.prompt.innerHTML = `${t('Now you: tap it')}<small>${t('Any key, the pad, Space or J')} · ${ex.time} · ♩ = ${S.bpm}</small>`; return; }
     const total = r.expected.length;
     const onTime = r.expected.filter(x => !x.miss && Math.abs(x.off) <= r.good).length;
     const hit = r.expected.filter(x => !x.miss).length;
@@ -212,12 +214,12 @@
     }
     count.n++; if (score >= 90) count.clean++;
     sess.n++; if (score >= 90) { sess.ok++; } UI.saveSession(sess);
-    el.prompt.innerHTML = `${score} %<small>${count.clean} of ${count.n} rhythms clean this session</small>`;
+    el.prompt.innerHTML = `${score} %<small>${t('{a} of {b} rhythms clean this session', { a: count.clean, b: count.n })}</small>`;
     el.feedback.className = 'feedback show ' + (score >= 90 ? 'ok' : score >= 60 ? 'info' : 'bad');
-    el.feedback.innerHTML = `${onTime} of ${total} on time` + (hit > onTime ? `, ${hit - onTime} a little off` : '') + (total > hit ? `, ${total - hit} missed` : '') +
-      (r.extra.length ? `, ${r.extra.length} extra tap${r.extra.length > 1 ? 's' : ''}` : '') +
-      (r.hits.length > 2 && Math.abs(mean) > 20 ? ` · on average ${Math.round(Math.abs(mean))} ms ${mean > 0 ? 'late' : 'early'}` : '') +
-      `<br><span class="muted">${score >= 90 ? 'Enter: next rhythm' : 'Space: try again · L: listen · Enter: next'}</span>`;
+    el.feedback.innerHTML = t('{a} of {b} on time', { a: onTime, b: total }) + (hit > onTime ? ', ' + t('{n} a little off', { n: hit - onTime }) : '') + (total > hit ? ', ' + t('{n} missed', { n: total - hit }) : '') +
+      (r.extra.length ? ', ' + (r.extra.length > 1 ? t('{n} extra taps', { n: r.extra.length }) : t('1 extra tap')) : '') +
+      (r.hits.length > 2 && Math.abs(mean) > 20 ? ' · ' + (mean > 0 ? t('on average {n} ms late', { n: Math.round(mean) }) : t('on average {n} ms early', { n: Math.round(-mean) })) : '') +
+      `<br><span class="muted">${score >= 90 ? t('Enter: next rhythm') : t('Space: try again · L: listen · Enter: next')}</span>`;
   }
 
   Input.on(e => { if (e.type === 'on') tap(e.time, e.source === 'screen'); });

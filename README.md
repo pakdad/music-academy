@@ -55,7 +55,13 @@ same `site/` with its own `editions/<name>/site.json`: `audience` picks which dr
 `drills.js` lists its audiences), `instruments` the instrument tabs that are live. Each edition becomes its own image
 and its own address, so its progress (kept per web address) stays separate. Today there's one: `adult` with piano.
 
-**Look.** The colours are the pakdad.com palette: paper, ink and terracotta (`#b6431c`, `#ef8a5f` on dark).
+**Look and language.** Two looks: the pakdad.com palette (paper, ink and terracotta `#b6431c`, `#ef8a5f` on dark) or
+black and white; both follow the system's light or dark mode. The interface speaks English or German (first visit: the
+browser's language), with note names English (B, B♭) or German (H, B). Settings on the home page.
+
+**Translating.** Wrap every text the pages show in `t('…')`; the English is the key, with `{placeholders}` for values.
+German goes into `site/shared/i18n-de.js`; pieces and drills carry a `de: { … }` block. `tools/check.mjs` fails the
+build if any text has no German or the placeholders differ, so nothing ships half translated.
 
 **MIDI.** Web MIDI works in Chrome, Edge and Opera on computers and in Chrome on Android, over https (or
 localhost). Safari and every browser on iPad and iPhone don't have it, so there use the on-screen keyboard or the

@@ -20,8 +20,8 @@
   };
 
   // latency: how late (ms) this setup's played notes arrive compared to what is heard, measured in the metronome
-  const prefs = Object.assign({ names: 'en', sound: true, feedback: true, keyboard: true, latency: 0 }, store.get('prefs', {}));
-  const setPref = (k, v) => { prefs[k] = v; store.set('prefs', prefs); applyPrefs(); };
+  const prefs = Object.assign({ names: (self.I18N && I18N.lang) || 'en', sound: true, feedback: true, keyboard: true, latency: 0 }, store.get('prefs', {}));
+  const setPref = (k, v) => { prefs[k] = v; store.set('prefs', prefs); applyPrefs(); if (k === 'lang' || k === 'theme') location.reload(); };
   function applyPrefs() {
     if (self.Sound) { Sound.enabled = prefs.sound; Sound.feedback = prefs.feedback; }
     document.documentElement.classList.toggle('no-keyboard', !prefs.keyboard);
@@ -29,7 +29,10 @@
   applyPrefs();
 
   const noteName = (n, opts = {}) => Theory.name(n, { lang: prefs.names, ...opts });
-  const keyName = key => Theory.keyName(key, { lang: prefs.names });
+  // German interface with English note names: "E♭-Dur"; English interface with German names: German throughout
+  const keyName = key => prefs.names === 'de' || !(self.I18N && I18N.lang === 'de')
+    ? Theory.keyName(key, { lang: prefs.names })
+    : Theory.name(Theory.keyTonic(key.fifths, key.minor)) + (key.minor ? '-Moll' : '-Dur');
   const chordName = (root, type, opts = {}) => Theory.chordName(root, type, { lang: prefs.names, ...opts });
 
   // ---------- progress per question ----------
@@ -101,7 +104,7 @@
       body.innerHTML = '';
       for (const f of spec) {
         if (f.show && !f.show(draft)) continue;
-        const row = h('div', { class: 'field' }, h('div', { class: 'field-label' }, f.label));
+        const row = h('div', { class: 'field' }, h('div', { class: 'field-label' }, t(f.label)));
         if (f.type === 'number') {
           const out = h('span', { class: 'num' }, f.format ? f.format(draft[f.id]) : draft[f.id]);
           const input = h('input', { type: 'range', min: f.min, max: f.max, step: f.step || 1, value: draft[f.id],
@@ -118,18 +121,18 @@
                 draft[f.id] = f.options.map(o => o[0]).filter(x => set.has(x));
               } else draft[f.id] = v;
               draw();
-            } }, label));
+            } }, t(label)));
           }
           row.append(seg);
         }
-        if (f.hint) row.append(h('div', { class: 'hint' }, f.hint));
+        if (f.hint) row.append(h('div', { class: 'hint' }, t(f.hint)));
         body.append(row);
       }
     }
     draw();
-    dlg.append(h('h2', {}, 'Settings'), body, h('div', { class: 'sheet-actions' },
-      h('button', { class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
-      h('button', { class: 'btn primary', onclick: () => { dlg.close(); onSave(draft); } }, 'Start')));
+    dlg.append(h('h2', {}, t('Settings')), body, h('div', { class: 'sheet-actions' },
+      h('button', { class: 'btn ghost', onclick: () => dlg.close() }, t('Cancel')),
+      h('button', { class: 'btn primary', onclick: () => { dlg.close(); onSave(draft); } }, t('Start'))));
     dlg.addEventListener('close', () => dlg.remove());
     document.body.append(dlg);
     dlg.showModal();
@@ -141,18 +144,18 @@
     const rows = Object.entries(all).map(([k, s]) => ({ k, s, w: weight(s, 1500) })).sort((a, b) => b.w - a.w);
     const dlg = h('dialog', { class: 'sheet' });
     const table = h('table', { class: 'stats' },
-      h('thead', {}, h('tr', {}, h('th', {}, 'What'), h('th', {}, 'Recent'), h('th', {}, 'Time'), h('th', {}, 'Tries'))),
+      h('thead', {}, h('tr', {}, h('th', {}, t('What')), h('th', {}, t('Recent')), h('th', {}, t('Time')), h('th', {}, t('Tries')))),
       h('tbody', {}, rows.slice(0, 40).map(({ k, s }) => h('tr', {},
         h('td', {}, describe ? describe(k) : k),
         h('td', { class: s.acc < 0.7 ? 'bad' : s.acc > 0.9 ? 'good' : '' }, Math.round(s.acc * 100) + ' %'),
         h('td', {}, s.t ? sec(s.t) : '–'),
         h('td', {}, String(s.n))))));
-    dlg.append(h('h2', {}, 'Your weak spots'),
-      h('p', { class: 'hint' }, rows.length ? 'Most-missed and slowest first. These come up more often.' : 'Nothing yet: practise a little first.'),
+    dlg.append(h('h2', {}, t('Your weak spots')),
+      h('p', { class: 'hint' }, rows.length ? t('Most-missed and slowest first. These come up more often.') : t('Nothing yet: practise a little first.')),
       h('div', { class: 'sheet-body' }, rows.length ? table : ''),
       h('div', { class: 'sheet-actions' },
-        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm('Forget everything this drill has learned about you?')) { store.del('stats:' + drill); delete cache[drill]; dlg.close(); onReset && onReset(); } } }, 'Reset'),
-        h('button', { class: 'btn primary', onclick: () => dlg.close() }, 'Close')));
+        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(t('Forget everything this drill has learned about you?'))) { store.del('stats:' + drill); delete cache[drill]; dlg.close(); onReset && onReset(); } } }, t('Reset')),
+        h('button', { class: 'btn primary', onclick: () => dlg.close() }, t('Close'))));
     dlg.addEventListener('close', () => dlg.remove());
     document.body.append(dlg);
     dlg.showModal();
@@ -162,17 +165,17 @@
   function page(opts) {
     const { drill, title } = opts;
     let settings = Object.assign({}, opts.defaults, store.get('settings:' + drill, {}));
-    document.title = `${title} · ${ED.name || 'Music Academy'}`;
+    document.title = `${t(title)} · ${ED.name || 'Music Academy'}`;
     const app = $('#app');
     const hud = h('div', { class: 'hud' });
     const midiDot = h('button', { class: 'midi', title: 'MIDI', onclick: () => showMidiHelp() }, h('span', { class: 'dot' }), h('span', { class: 'midi-text' }, 'MIDI'));
-    const soundBtn = h('button', { class: 'icon', title: 'Sound on/off', onclick: () => { setPref('sound', !prefs.sound); soundBtn.textContent = prefs.sound ? '🔊' : '🔇'; } }, prefs.sound ? '🔊' : '🔇');
-    const kbBtn = h('button', { class: 'icon', title: 'On-screen keyboard', onclick: () => setPref('keyboard', !prefs.keyboard) }, '🎹');
-    const statsBtn = h('button', { class: 'icon', title: 'Weak spots', onclick: () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)) }, '📊');
-    const setBtn = h('button', { class: 'icon', title: 'Settings', onclick: () => openSettings() }, '⚙️');
+    const soundBtn = h('button', { class: 'icon', title: t('Sound on/off'), onclick: () => { setPref('sound', !prefs.sound); soundBtn.textContent = prefs.sound ? '🔊' : '🔇'; } }, prefs.sound ? '🔊' : '🔇');
+    const kbBtn = h('button', { class: 'icon', title: t('On-screen keyboard'), onclick: () => setPref('keyboard', !prefs.keyboard) }, '🎹');
+    const statsBtn = h('button', { class: 'icon', title: t('Weak spots'), onclick: () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)) }, '📊');
+    const setBtn = h('button', { class: 'icon', title: t('Settings'), onclick: () => openSettings() }, '⚙️');
     const bar = h('header', { class: 'bar' },
-      h('a', { class: 'home', href: '/', title: ED.name || 'Home' }, '‹'),
-      h('h1', {}, title), opts.hud === false ? null : hud,
+      h('a', { class: 'home', href: '/', title: ED.name || t('Home') }, '‹'),
+      h('h1', {}, t(title)), opts.hud === false ? null : hud,
       h('div', { class: 'tools' }, ...Object.entries({ midi: midiDot, sound: soundBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
         .filter(([id]) => (opts.tools || ['midi', 'sound', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
     const prompt = h('div', { class: 'prompt' });
@@ -185,20 +188,20 @@
     Input.onStatus(({ state, devices }) => {
       midiDot.dataset.state = state;
       midiDot.title = state === 'ready' ? 'MIDI: ' + devices.join(', ')
-        : state === 'none' ? 'No MIDI keyboard connected'
-        : state === 'unsupported' ? 'This browser has no Web MIDI (use Chrome or Edge)'
-        : state === 'denied' ? 'MIDI access was refused' : 'MIDI';
+        : state === 'none' ? t('No MIDI keyboard connected')
+        : state === 'unsupported' ? t('This browser has no Web MIDI (use Chrome or Edge)')
+        : state === 'denied' ? t('MIDI access was refused') : 'MIDI';
       midiDot.querySelector('.midi-text').textContent = state === 'ready' ? devices[0] : 'MIDI';
     });
     Input.init();
     function showMidiHelp() {
       const s = Input.state;
       const msg = {
-        ready: `Connected: ${Input.devices.join(', ')}. Play the answers on your keyboard.`,
-        none: 'No MIDI keyboard found. Connect your digital piano by USB (or Bluetooth MIDI) and switch it on; it shows up here by itself.',
-        unsupported: 'This browser can\'t read MIDI keyboards. Use Chrome or Edge on a computer or Android tablet (Safari and iPad can\'t), over https. The on-screen keyboard and the answer buttons work everywhere.',
-        denied: 'MIDI access was refused. Allow it in the browser\'s site settings (the icon left of the address) and reload.',
-      }[s] || 'Looking for MIDI keyboards…';
+        ready: t('Connected: {devices}. Play the answers on your keyboard.', { devices: Input.devices.join(', ') }),
+        none: t('No MIDI keyboard found. Connect your digital piano by USB (or Bluetooth MIDI) and switch it on; it shows up here by itself.'),
+        unsupported: t('This browser can\'t read MIDI keyboards. Use Chrome or Edge on a computer or Android tablet (Safari and iPad can\'t), over https. The on-screen keyboard and the answer buttons work everywhere.'),
+        denied: t('MIDI access was refused. Allow it in the browser\'s site settings (the icon left of the address) and reload.'),
+      }[s] || t('Looking for MIDI keyboards…');
       alert(msg);
     }
 
@@ -209,10 +212,10 @@
       const avg = sess.ok ? sec(sess.ms / sess.ok) : '–';
       hud.innerHTML = '';
       hud.append(
-        h('span', { title: 'Right / asked' }, h('b', {}, `${sess.ok}/${sess.n}`)),
-        h('span', { title: 'Accuracy this session' }, acc),
-        h('span', { title: 'Average time for a right answer' }, '⏱ ' + avg),
-        h('span', { title: 'Streak (best)' }, `🔥 ${sess.streak}` + (sess.best > sess.streak ? ` (${sess.best})` : '')));
+        h('span', { title: t('Right / asked') }, h('b', {}, `${sess.ok}/${sess.n}`)),
+        h('span', { title: t('Accuracy this session') }, acc),
+        h('span', { title: t('Average time for a right answer') }, '⏱ ' + avg),
+        h('span', { title: t('Streak (best)') }, `🔥 ${sess.streak}` + (sess.best > sess.streak ? ` (${sess.best})` : '')));
     }
     drawHud();
     addEventListener('pagehide', () => saveSession(sess));
@@ -299,7 +302,7 @@
     return data;
   }
   function importData(obj) {
-    if (!obj || !obj.data) throw new Error('Not a progress file');
+    if (!obj || !obj.data) throw new Error(t('Not a progress file'));
     for (const [k, v] of Object.entries(obj.data)) store.set(k, v);
   }
 
