@@ -70,6 +70,14 @@ answer buttons. Plug in the piano and it shows up by itself (the MIDI light in t
 **Progress** lives in the browser's local storage for this address. The home page can save it to a file and load
 it back, to move it between devices.
 
+## Importing pieces
+
+**Pieces → My pieces → Import a piece** reads a MIDI file (.mid) or MusicXML (.musicxml, .xml, .mxl) in the browser
+and turns it into a piece you can play with all three modes. IMSLP has MIDI files for many works (MusicXML is rarer;
+MuseScore exports it). PDFs are scans and can't be read as notes. The import simplifies: one line of notes and chords
+per hand, timing rounded to sixteenths, no ties, the first time and key signature; the preview lists what changed.
+Imported pieces stay on the device. Every piece can also be downloaded as MIDI.
+
 ## Adding a piece
 
 Add it to `site/shared/pieces.js`. Each hand is text, bar by bar:

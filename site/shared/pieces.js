@@ -5,13 +5,14 @@
 //   tempo: quarter notes per minute · pickup: quarter notes before the first full bar
 //   imslp: where to find the full original score in the public-domain Petrucci Music Library
 //   minor: the key is minor (key gives only the signature) · de: { title, by, about } in German
-const IMSLP = q => 'https://imslp.org/index.php?search=' + encodeURIComponent(q);
+// IMSLP work pages (exact titles, checked against IMSLP's API on 2026-11-24)
+const IMSLP = title => 'https://imslp.org/wiki/' + encodeURIComponent(title.replace(/ /g, '_')).replace(/%2C/g, ',').replace(/%3A/g, ':').replace(/%28/g, '(').replace(/%29/g, ')');
 
 self.PIECES = [
   // ---------------- level 1 ----------------
   {
     id: 'ode-to-joy', title: 'Ode to Joy', by: 'Ludwig van Beethoven, Symphony No. 9 (1824)', level: 1,
-    key: 0, time: [4, 4], tempo: 92, imslp: IMSLP('Symphony No.9, Op.125 (Beethoven)'),
+    key: 0, time: [4, 4], tempo: 92, imslp: IMSLP('Symphony No.9, Op.125 (Beethoven, Ludwig van)'),
     about: 'Right hand in C position, thumb on C. Watch the dotted rhythm in bars 4 and 8.',
     de: { title: "Ode an die Freude", by: "Ludwig van Beethoven, 9. Sinfonie (1824)", about: "Rechte Hand in C-Lage, Daumen auf C. Achte auf den punktierten Rhythmus in Takt 4 und 8." },
     rh: 'E4@3:4 E4@3 F4@4 G4@5 | G4@5 F4@4 E4@3 D4@2 | C4@1 C4@1 D4@2 E4@3 | E4@3:4. D4@2:8 D4@2:2 | ' +
@@ -149,7 +150,7 @@ self.PIECES = [
   },
   {
     id: 'minuet-in-g', title: 'Minuet in G (simplified)', by: 'Christian Petzold (c. 1725), from the Notebook for Anna Magdalena Bach; left hand simplified for this site', level: 3,
-    key: 1, time: [3, 4], tempo: 96, imslp: IMSLP('Minuet in G major, BWV Anh.114'),
+    key: 1, time: [3, 4], tempo: 96, imslp: IMSLP('Minuet in G major, BWV Anh.114 (Pezold, Christian)'),
     about: 'G major, one sharp (every F is F♯). Running eighths in the right hand over one bass note per bar.',
     de: { title: "Menuett in G-Dur (vereinfacht)", by: "Christian Petzold (um 1725), aus dem Notenbüchlein für Anna Magdalena Bach; linke Hand für diese Seite vereinfacht", about: "G-Dur, ein Kreuz (jedes F ist ein Fis). Laufende Achtel in der rechten Hand über einem Basston pro Takt." },
     rh: 'D5@5:4 G4@1:8 A4@2 B4@3 C5@4 | D5@5:4 G4@1 G4@1 | E5@3:4 C5@1:8 D5@2 E5@3 F#5@4 | G5@5:4 G4@1 G4@1 | C5@4:4 D5@5:8 C5@4 B4@3 A4@2 | B4@4:4 C5@5:8 B4@4 A4@3 G4@2 | F#4@1:4 G4@2:8 A4@3 B4@4 G4@2 | A4@3:2. | ' +

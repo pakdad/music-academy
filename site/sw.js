@@ -3,7 +3,7 @@
 importScripts('/shared/drills.js');
 
 const CACHE = 'music-academy-dev';
-const SHARED = ['edition', 'i18n', 'i18n-de', 'theory', 'glyphs', 'staff', 'score', 'pieces', 'audio', 'input', 'keyboard', 'ui', 'chordinput', 'transport', 'drills'].map(f => `/shared/${f}.js`);
+const SHARED = ['edition', 'i18n', 'i18n-de', 'theory', 'glyphs', 'staff', 'score', 'pieces', 'importer', 'audio', 'input', 'keyboard', 'ui', 'chordinput', 'transport', 'drills'].map(f => `/shared/${f}.js`);
 const CORE = [
   '/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png',
   '/shared/app.css', ...SHARED,

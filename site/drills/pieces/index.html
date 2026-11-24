@@ -25,6 +25,7 @@
 <script src="/shared/keyboard.js"></script>
 <script src="/shared/ui.js"></script>
 <script src="/shared/transport.js"></script>
+<script src="/shared/importer.js"></script>
 <script>
 // Pieces: real music with rhythm. Three ways to play one:
 //   Wait for me   the score waits until you play the right notes (learn the notes first)
@@ -44,6 +45,9 @@
   const saveSettings = () => UI.store.set(prefsKey, settings);
   const pieceSettings = p => Object.assign({ bpm: p.tempo, hands: p.rh && p.lh ? 'both' : p.rh ? 'rh' : 'lh' }, UI.store.get('pieces:piece:' + p.id, {}));
   const best = () => UI.store.get('pieces:best', {});
+  // pieces the user imported (MIDI or MusicXML), kept on this device
+  const mine = () => UI.store.get('mypieces', []);
+  const allPieces = () => [...PIECES, ...mine()];
 
   const keyName = p => UI.keyName({ fifths: p.key || 0, minor: !!p.minor });
   const handsOf = p => p.rh && p.lh ? t('both hands') : p.rh ? t('right hand') : t('left hand');
@@ -59,20 +63,93 @@
       h('h2', {}, t('Pieces')),
       h('p', { class: 'muted' }, t('Short pieces to read and play. Start with “Wait for me” to learn the notes, then “Play along” with the metronome, slow at first.')),
       h('p', { class: 'muted' }, t('The classics are public domain; for the full original scores, each links to IMSLP, the Petrucci Music Library. Finger numbers can be switched on in every piece.'))));
+    // my pieces, and importing new ones
+    stage.append(h('h3', { class: 'lib-level' }, t('My pieces')));
+    const fileIn = h('input', { type: 'file', accept: '.mid,.midi,.musicxml,.xml,.mxl,.pdf', hidden: true, onchange: e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f); } });
+    stage.append(h('div', { class: 'lib-grid' },
+      mine().map(p => card(p, b)),
+      h('button', { class: 'pcard import', onclick: () => fileIn.click() },
+        h('div', { class: 'pcard-title' }, '＋ ' + t('Import a piece')),
+        h('p', {}, t('From IMSLP: open the work\'s page, download its MIDI file (or a MusicXML file, e.g. from MuseScore), then load it here. You can then play it like any piece here.')),
+        h('p', { class: 'muted' }, t('PDF scores are pictures of the music and can\'t be read as notes.'))),
+      fileIn));
     for (const level of [1, 2, 3]) {
       const ps = PIECES.filter(p => p.level === level);
       if (!ps.length) continue;
       stage.append(h('h3', { class: 'lib-level' }, LEVELS[level]));
-      stage.append(h('div', { class: 'lib-grid' }, ps.map(p => {
-        const scores = Object.entries(b).filter(([k]) => k.startsWith(p.id + ':')).map(([, v]) => v.score);
-        return h('a', { class: 'pcard', href: '#' + p.id },
-          h('div', { class: 'pcard-title' }, tr(p, 'title')),
-          h('div', { class: 'pcard-by' }, tr(p, 'by')),
-          h('div', { class: 'pcard-meta' }, `${keyName(p)} · ${p.time.join('/')} · ${handsOf(p)} · ♩ = ${p.tempo}`),
-          h('p', {}, tr(p, 'about')),
-          h('div', { class: 'pcard-best' }, scores.length ? t('Best: {n} %', { n: Math.max(...scores) }) : ''));
-      })));
+      stage.append(h('div', { class: 'lib-grid' }, ps.map(p => card(p, b))));
     }
+  }
+  function card(p, b) {
+    const scores = Object.entries(b).filter(([k]) => k.startsWith(p.id + ':')).map(([, v]) => v.score);
+    return h('a', { class: 'pcard', href: '#' + p.id },
+      h('div', { class: 'pcard-title' }, tr(p, 'title')),
+      h('div', { class: 'pcard-by' }, tr(p, 'by') || (p.mine ? t('Imported from {file}', { file: p.source || '' }) : '')),
+      h('div', { class: 'pcard-meta' }, `${keyName(p)} · ${p.time.join('/')} · ${handsOf(p)} · ♩ = ${p.tempo}`),
+      p.mine ? null : h('p', {}, tr(p, 'about')),
+      h('div', { class: 'pcard-best' }, scores.length ? t('Best: {n} %', { n: Math.max(...scores) }) : ''));
+  }
+
+  // ---------- importing ----------
+  const ERRORS = {
+    pdf: () => t('That\'s a PDF: a picture of the music, which can\'t be read as notes. On IMSLP, look for a MIDI file of the same work (or a MusicXML file, e.g. from MuseScore).'),
+    'not-midi': () => t('This is not a MIDI file the importer can read.'),
+    smpte: () => t('This MIDI file counts time in frames (SMPTE), not in beats; it can\'t be turned into notes.'),
+    'not-zip': () => t('This compressed MusicXML (.mxl) file can\'t be opened.'),
+    'not-musicxml': () => t('This is not a MusicXML file the importer can read.'),
+    timewise: () => t('This MusicXML file is stored "timewise"; export it again as normal (partwise) MusicXML.'),
+    'no-notes': () => t('No notes found in this file.'),
+    unknown: () => t('Unknown file type. Use a MIDI file (.mid) or MusicXML (.musicxml, .xml, .mxl).'),
+  };
+  const WARN = {
+    meter: () => t('The time signature changes; everything is shown in the first one.'),
+    key: () => t('The key changes; the first key signature is used and the rest is written with accidentals.'),
+    parts: () => t('Several instruments: only the piano part was used.'),
+    chords: () => t('Very full chords were thinned to six notes per hand.'),
+    long: () => t('Long piece: only the first 300 bars were imported.'),
+    time: () => t('Unusual time signature: shown in 4/4.'),
+  };
+  async function importFile(file) {
+    let r;
+    try { r = await Importer.fromFile(file); }
+    catch (e) { alert(e.user && ERRORS[e.message] ? ERRORS[e.message]() : t('The file could not be imported:') + ' ' + e.message); return; }
+    const { piece, report } = r;
+    const titleIn = h('input', { type: 'text', value: piece.title, class: 'text' });
+    const byIn = h('input', { type: 'text', value: piece.by, class: 'text', placeholder: t('Composer') });
+    let preview;
+    try { preview = Score.layout(piece, { width: 70 }).svg; } catch (e) { preview = ''; }
+    const lines = [
+      t('{n} notes in {b} bars, {hands}', { n: report.notes, b: report.bars, hands: handsOf(piece) }),
+      `${keyName(piece)} · ${piece.time.join('/')} · ♩ = ${piece.tempo}`,
+      report.offGrid ? t('{n} notes moved to the nearest sixteenth (triplets, grace notes, free timing).', { n: report.offGrid }) : '',
+      report.simplified ? t('{n} long or tied notes end at the bar line or the next note.', { n: report.simplified }) : '',
+      ...report.warnings.map(w => WARN[w] ? WARN[w]() : w),
+    ].filter(Boolean);
+    const dlg = h('dialog', { class: 'sheet' });
+    dlg.append(h('h2', {}, t('Import a piece')),
+      h('div', { class: 'sheet-body' },
+        h('div', { class: 'field' }, h('div', { class: 'field-label' }, t('Title')), titleIn),
+        h('div', { class: 'field' }, h('div', { class: 'field-label' }, t('Composer')), byIn),
+        h('ul', { class: 'report' }, lines.map(l => h('li', {}, l))),
+        h('div', { class: 'card score-card preview', html: preview })),
+      h('div', { class: 'sheet-actions' },
+        h('button', { class: 'btn ghost', onclick: () => dlg.close() }, t('Cancel')),
+        h('button', { class: 'btn primary', onclick: () => {
+          piece.title = titleIn.value.trim() || piece.title;
+          piece.by = byIn.value.trim();
+          const list = mine(); list.push(piece);
+          try { UI.store.set('mypieces', list); } catch (e) { alert(t('Not enough space on this device to keep the piece.')); return; }
+          dlg.close();
+          location.hash = '#' + piece.id;
+        } }, t('Add to my pieces'))));
+    dlg.addEventListener('close', () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+  }
+  function downloadMidi() {
+    const blob = new Blob([Importer.toMidi(P)], { type: 'audio/midi' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: (tr(P, 'title') || 'piece').replace(/[^\w\-äöüÄÖÜß ]+/g, '').trim().replace(/ +/g, '_') + '.mid' });
+    document.body.append(a); a.click(); a.remove();
   }
 
   // ---------- one piece ----------
@@ -81,7 +158,7 @@
 
   function open(id) {
     stop();
-    P = PIECES.find(p => p.id === id);
+    P = allPieces().find(p => p.id === id);
     if (!P) return library();
     PS = pieceSettings(P);
     if (!(P.rh && P.lh)) PS.hands = P.rh ? 'rh' : 'lh';
@@ -112,12 +189,20 @@
         h('div', { class: 'muted' }, tr(P, 'by')),
         h('div', { class: 'pcard-meta' }, `${keyName(P)} · ${P.time.join('/')} · ${handsOf(P)}`),
         h('p', { class: 'pabout' }, tr(P, 'about')),
-        P.imslp ? h('a', { class: 'imslp', href: P.imslp, target: '_blank', rel: 'noopener' }, t('Full original score on IMSLP') + ' ↗') : null),
+        h('div', { class: 'plinks' },
+          P.imslp ? h('a', { class: 'imslp', href: P.imslp, target: '_blank', rel: 'noopener' }, t('Full original score on IMSLP') + ' ↗') : null,
+          h('button', { class: 'linkbtn', onclick: downloadMidi }, t('Download MIDI')),
+          P.mine ? h('button', { class: 'linkbtn danger', onclick: () => {
+            if (!confirm(t('Delete “{title}” from your pieces?', { title: P.title }))) return;
+            UI.store.set('mypieces', mine().filter(p => p.id !== P.id));
+            location.hash = '';
+          } }, t('Delete')) : null),
+        P.imslp ? h('p', { class: 'hint' }, t('IMSLP often has a MIDI file of the whole work: download it there and import it under “My pieces”.')) : null),
       h('div', { class: 'controls' },
         h('div', { class: 'ctl' }, h('span', {}, t('Mode')), seg([['wait', t('Wait for me')], ['play', t('Play along')], ['listen', t('Listen')]], settings.mode, v => { settings.mode = v; saveSettings(); refreshControls(); })),
         P.rh && P.lh ? h('div', { class: 'ctl' }, h('span', {}, t('Hands')), seg(Object.entries(HANDS), PS.hands, v => { PS.hands = v; savePiece(); render(); refreshControls(); })) : null,
         h('div', { class: 'ctl tempo' }, h('span', {}, t('Tempo')), tempo, els.tempoOut),
-        els.toggles = h('div', { class: 'ctl toggles' }, toggle('fingering', t('Finger numbers'), () => { if (!run) render(); }), toggle('metronome', t('Metronome')),
+        els.toggles = h('div', { class: 'ctl toggles' }, /@/.test((P.rh || '') + (P.lh || '')) ? toggle('fingering', t('Finger numbers'), () => { if (!run) render(); }) : null, toggle('metronome', t('Metronome')),
           els.accomp = toggle('accomp', t('Play the other hand for me'))),
         h('div', { class: 'ctl go' }, els.start, els.status)),
       els.score, els.result);

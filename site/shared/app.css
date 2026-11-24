@@ -221,3 +221,11 @@ table.stats td.bad { color: var(--bad); }
 .imslp { display: inline-block; margin-top: 6px; font-size: 14px; }
 .card.score-card { width: 100%; }
 .rhythm-card { max-width: 1100px; }
+.pcard.import { cursor: pointer; text-align: left; font: inherit; border: 1.5px dashed var(--line); background: transparent; box-shadow: none; }
+.pcard.import:hover { border-color: var(--accent); }
+.plinks { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.linkbtn { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+.linkbtn.danger { color: var(--bad); }
+input.text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); }
+ul.report { margin: 4px 0 12px; padding-left: 18px; font-size: 14px; }
+.score-card.preview { max-height: 260px; overflow: hidden; padding: 4px 8px; }

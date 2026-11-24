@@ -118,7 +118,7 @@
     const keyW = sig.reduce((a, s) => a + (s.alter > 0 ? 1.15 : 1.05), 0) + (sig.length ? 0.7 : 0);
     const clefW = rhythm ? 2.6 : 3.7;
     const headOther = x0 + clefW + keyW + 0.4;
-    const headFirst = headOther + 2.6;
+    const headFirst = headOther + 0.8 + Math.max(...[num, den].map(n => String(n).split('').reduce((w, d) => w + GL['timeSig' + d].w, 0)));
     const systems = [];
     let cur = { bars: [], head: headFirst, w: 0 };
     for (const b of bars) {
@@ -165,8 +165,14 @@
           sx += a.alter > 0 ? 1.15 : 1.05;
         });
         if (si === 0) {
+          // digits side by side (12/8), the shorter number centred over the longer
           const tx = sx + (sig.length ? 0.5 : 0.1);
-          out.push(use('timeSig' + num, tx, s.tops[st] + 1), use('timeSig' + den, tx, s.tops[st] + 3));
+          const width = n => String(n).split('').reduce((w, d) => w + GL['timeSig' + d].w, 0);
+          const wMax = Math.max(width(num), width(den));
+          for (const [n, y] of [[num, s.tops[st] + 1], [den, s.tops[st] + 3]]) {
+            let x = tx + (wMax - width(n)) / 2;
+            for (const d of String(n)) { out.push(use('timeSig' + d, x, y)); x += GL['timeSig' + d].w; }
+          }
         }
       }
       const top = rhythm ? s.tops.rhythm + 1 : s.tops[staves[0]], bottom = rhythm ? s.tops.rhythm + 3 : s.bottom;

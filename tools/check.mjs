@@ -13,7 +13,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = path.join(ROOT, 'site');
 const ctx = { self: {} };
 vm.createContext(ctx);
-for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
+ctx.TextDecoder = TextDecoder; ctx.TextEncoder = TextEncoder;
+for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills', 'importer']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
 const T = ctx.self.Theory, Staff = ctx.self.Staff;
 
 let failed = 0, passed = 0;
@@ -177,6 +178,30 @@ for (const p of ctx.self.PIECES) {
       rendered++;
     } catch (e) { failed++; console.error(`✗ ${what} at width ${width}: ${e.message}`); }
   }
+}
+
+// ---------- importing: every piece survives MIDI out and back in; IMSLP links go to work pages ----------
+{
+  const Imp = ctx.self.Importer;
+  for (const p of ctx.self.PIECES) {
+    if (p.imslp && !/^https:\/\/imslp\.org\/wiki\/[^?#]+_\([^)]+\)$/.test(p.imslp)) { failed++; console.error(`✗ piece ${p.id}: IMSLP link is not a work page: ${p.imslp}`); }
+    const bytes = Imp.toMidi(p);
+    let back;
+    try { back = Imp.fromMidi(bytes.buffer, p.id + '.mid').piece; } catch (e) { failed++; console.error(`✗ piece ${p.id}: MIDI round trip: ${e.message}`); continue; }
+    const shift = p.pickup ? back.time[0] * 4 / back.time[1] - p.pickup : 0; // MIDI has no pickup bar: the import starts a bar early
+    for (const v of ['rh', 'lh']) {
+      const notes = src => !src ? '' : Score.parseVoice(src, v).events.filter(e => !e.rest).flatMap(e => e.notes.map(n => `${(e.t).toFixed(2)}:${T.midi(n)}`)).sort().join(' ');
+      const want = notes(p[v]);
+      const got = !back[v] ? '' : Score.parseVoice(back[v], v).events.filter(e => !e.rest).flatMap(e => e.notes.map(n => `${(e.t).toFixed(2)}:${T.midi(n)}`)).sort().join(' ');
+      if (want === got) passed++;
+      else { failed++; console.error(`✗ piece ${p.id} ${v}: notes changed in the MIDI round trip\n    want ${want.slice(0, 160)}\n    got  ${got.slice(0, 160)}`); }
+    }
+    if (back.key !== (p.key || 0) || back.time.join('/') !== p.time.join('/') || back.tempo !== p.tempo) { failed++; console.error(`✗ piece ${p.id}: key/time/tempo changed in the round trip`); } else passed++;
+    try { Score.layout(back, { width: 90 }); passed++; } catch (e) { failed++; console.error(`✗ piece ${p.id}: the imported version doesn't engrave: ${e.message}`); }
+  }
+  // a note too long for one value and across the bar line: shortened, still one onset
+  const enc = Imp.encodeHand([{ t: 0, d: 1.25, midi: 60 }, { t: 3, d: 2, midi: 64 }], { L: 4, pickup: 0, length: 8, fifths: 0 });
+  eq(enc.text, 'C4:4 r:2 E4:4 | r:1', 'importer shortens notes instead of tying, and merges rests');
 }
 
 // ---------- German: every text the pages show has a translation ----------
