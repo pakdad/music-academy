@@ -147,6 +147,12 @@ self-hosted runner on the homelab pulls it and restarts the container (health-ch
 makes versioned images and a GitHub Release. To roll back, run the workflow by hand with an older `image_tag`.
 The one-time server setup is in [docs/homelab-setup.md](docs/homelab-setup.md).
 
+## Support
+
+Music Academy is free, with no ads and no tracking. If it helps you, you can support it on
+[PayPal](https://www.paypal.me/Pakdad). The link sits at the bottom of the home page too; it comes from the
+edition's `site.json` (`"support"`), so an edition without one shows nothing.
+
 ## Licence and credits
 
 The code is under the [MIT License](LICENSE).

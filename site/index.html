@@ -36,6 +36,11 @@
       <input type="file" id="file" accept="application/json" hidden>
     </div>
   </section>
+  <section class="support" id="support" hidden>
+    <span class="support-icon" id="supportIcon"></span>
+    <p data-t>Music Academy is free, with no ads and no tracking. If it helps you practise, you can support it.</p>
+    <a class="btn ghost" id="supportLink" target="_blank" rel="noopener"></a>
+  </section>
   <footer>
     <span data-t>Piano: best with a digital piano over USB or Bluetooth MIDI, in Chrome or Edge; without one, use the on-screen keyboard or the answer buttons. Guitar: the microphone listens (allow it when asked), or click the fretboard. Install it as an app from the browser's menu; it then works offline.</span><br>
     <span data-t>Music font:</span> <a href="https://github.com/steinbergmedia/bravura">Bravura</a> by Steinberg, SIL Open Font License.
@@ -133,6 +138,14 @@
     try { UI.importData(JSON.parse(await f.text())); alert(t('Progress loaded.')); location.reload(); }
     catch (err) { alert(t('That file could not be read:') + ' ' + err.message); }
   };
+
+  // supporting the project (editions without a link leave it out)
+  if (ED.support) {
+    $('#supportIcon').append(Icons.el('heart', 22));
+    $('#supportLink').href = ED.support;
+    $('#supportLink').append(t('Support with PayPal'));
+    $('#support').hidden = false;
+  }
 
   Input.init();
   tabs();

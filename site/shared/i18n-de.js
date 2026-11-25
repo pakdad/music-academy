@@ -29,6 +29,8 @@ self.I18N_DE = {
   'Everything runs in this browser and your progress stays on this device (nothing is sent anywhere). Save it to a file to move it to another device.':
     'Alles läuft in diesem Browser, und dein Fortschritt bleibt auf diesem Gerät (nichts wird irgendwohin gesendet). Speichere ihn in einer Datei, um ihn auf ein anderes Gerät mitzunehmen.',
   'Music font:': 'Notenschrift:',
+  'Music Academy is free, with no ads and no tracking. If it helps you practise, you can support it.': 'Music Academy ist kostenlos, ohne Werbung und ohne Tracking. Wenn es dir beim Üben hilft, kannst du es unterstützen.',
+  'Support with PayPal': 'Mit PayPal unterstützen',
   'Piano: best with a digital piano over USB or Bluetooth MIDI, in Chrome or Edge; without one, use the on-screen keyboard or the answer buttons. Guitar: the microphone listens (allow it when asked), or click the fretboard. Install it as an app from the browser\'s menu; it then works offline.':
     'Klavier: am besten mit einem Digitalpiano über USB oder Bluetooth-MIDI, in Chrome oder Edge; sonst mit der Bildschirmtastatur oder den Antwortknöpfen. Gitarre: das Mikrofon hört zu (erlaube es, wenn gefragt), oder klicke das Griffbrett. Über das Browsermenü lässt es sich als App installieren und funktioniert dann auch offline.',
   'Read faster, find the key, know the chords: music practice for piano and guitar.': 'Schneller lesen, die Tonart finden, die Akkorde kennen: Üben für Klavier und Gitarre.',

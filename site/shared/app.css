@@ -452,6 +452,12 @@ body.homepage { overflow-y: auto; }
 .card.block h2 .ico { color: var(--accent); }
 .card.block p { margin: 0 0 14px; }
 .home footer { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.support { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border: 1px dashed var(--line); border-radius: 16px; }
+.support[hidden] { display: none; }
+.support p { flex: 1; margin: 0; color: var(--muted); font-size: 14.5px; }
+.support-icon { flex: none; color: var(--accent); display: grid; }
+.support .btn { flex: none; text-decoration: none; }
+@media (max-width: 560px) { .support { flex-wrap: wrap; } .support p { flex-basis: calc(100% - 40px); } .support .btn { width: 100%; justify-content: center; } }
 @media (max-width: 560px) { .continue-stats { display: none; } .instr { display: flex; } .instr-btn { flex: 1; justify-content: center; padding: 10px; } }
 #sections { display: flex; flex-direction: column; gap: 30px; }
 .home-bar .tools .label { margin-left: 4px; }

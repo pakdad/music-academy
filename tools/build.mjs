@@ -37,6 +37,7 @@ const write = (f, s) => fs.writeFileSync(f, s);
 
 // the edition
 const info = { name: cfg.name, slug: cfg.slug, audience: cfg.audience, instruments: cfg.instruments };
+if (cfg.support) info.support = cfg.support; // optional: a link to support the project (home page)
 write(out('shared', 'edition.js'), `// ${cfg.name} (made by tools/build.mjs ${edition}).\nself.EDITION = ${JSON.stringify(info, null, 2)};\n`);
 
 // the app's name and description

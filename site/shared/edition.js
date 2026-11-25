@@ -4,5 +4,6 @@ self.EDITION = {
   "name": "Music Academy",
   "slug": "music-academy",
   "audience": "adult",
-  "instruments": ["piano", "guitar"]
+  "instruments": ["piano", "guitar"],
+  "support": "https://www.paypal.me/Pakdad"
 };
