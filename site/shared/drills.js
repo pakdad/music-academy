@@ -2,8 +2,14 @@
 // instrument: which instrument section it belongs to ('any' = all); audience: which editions show it;
 // noStats: the page keeps no per-question sessions, so the home page shows no count for it.
 // icon: a drill icon in shared/icons.js; section: its group on the home page (SECTIONS).
-self.SECTIONS = [['tools', 'Tune and find your way'], ['read', 'Read music'], ['harmony', 'Harmony'], ['chords', 'Chords'], ['hands', 'Right hand'], ['play', 'Play pieces'], ['time', 'Rhythm and time']];
+self.SECTIONS = [['tools', 'Tune and find your way'], ['lookup', 'Look it up'], ['read', 'Read music'], ['harmony', 'Harmony'], ['chords', 'Chords'], ['hands', 'Right hand'], ['play', 'Play pieces'], ['time', 'Rhythm and time']];
 self.DRILLS = [
+  {
+    id: 'chord-book', path: 'drills/chord-book/', instrument: 'any', audience: ['adult'], noStats: true,
+    name: 'Chord book', icon: 'chord-book', section: 'lookup',
+    about: 'Look up any chord on the piano or the guitar: its notes, the usual and the easy way to play it, two-hand and barre shapes, inversions and other bass notes, with fingers.',
+    de: { name: "Akkordbuch", about: "Jeden Akkord auf Klavier oder Gitarre nachschlagen: seine Töne, die übliche und die leichte Spielweise, Griffe für zwei Hände und Barrégriffe, Umkehrungen und andere Basstöne, mit Fingersatz." },
+  },
   {
     id: 'note-reading', path: 'drills/note-reading/', instrument: 'piano', audience: ['adult'],
     name: 'Note reading', icon: 'note-reading', section: 'read',

@@ -43,7 +43,7 @@
   const DEFAULTS = { mode: 'name', types: ['maj', 'min'], inv: 'root', maxKey: 3, clef: 'treble' };
 
   const page = UI.page({
-    drill: 'chords', title: t('Chords'), settings: SPEC, defaults: DEFAULTS,
+    drill: 'chords', title: t('Chords'), settings: SPEC, defaults: DEFAULTS, tools: ['midi', 'book', 'keyboard', 'stats', 'settings'],
     describe: item => { const c = fromItem(item); return UI.chordName(c.root, c.type, { bass: c.notes[0] }) + ` (${t(T.CHORDS[c.type].name)})`; },
     onSettings: () => start(), keyboard: { lo: 48, hi: 84 },
   });

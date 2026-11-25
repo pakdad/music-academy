@@ -42,6 +42,8 @@
     chevron: `<path ${S} d="M9 4.5 16.5 12 9 19.5"/>`,
     heart: `<path ${S} d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/>`,
     info: `<circle ${S} cx="12" cy="12" r="9"/><path ${S} d="M12 11v5.5"/><circle ${F} cx="12" cy="7.8" r="1.2"/>`,
+    book: `<path ${S} d="M12 6.5C9.8 4.9 6.8 4.4 3.5 4.8v13.4c3.3-.4 6.3.1 8.5 1.7 2.2-1.6 5.2-2.1 8.5-1.7V4.8c-3.3-.4-6.3.1-8.5 1.7zM12 6.5v13.4"/>`,
+    search: `<circle ${S} cx="10.5" cy="10.5" r="6.5"/><path ${S} d="M15.3 15.3 20.5 20.5"/>`,
     hand: `<path ${S} d="M7 11V6.5a1.5 1.5 0 0 1 3 0V11V4.5a1.5 1.5 0 0 1 3 0V11V5.5a1.5 1.5 0 0 1 3 0V12v-3.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.2a6 6 0 0 1-4.9-2.6L3.6 15A1.6 1.6 0 0 1 6 13l1 1"/>`,
   };
   // ---------- drills (48×48) ----------
@@ -50,6 +52,7 @@
   const faint = (y, n = 3, gap = 7) => `<path ${'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"'} opacity=".38" d="${Array.from({ length: n }, (_, i) => `M4 ${y + i * gap}h40`).join('')}"/>`;
   const head = (x, y, filled = true) => `<ellipse ${filled ? F : D} cx="${x}" cy="${y}" rx="4.2" ry="3.2" transform="rotate(-20 ${x} ${y})"/>`;
   const DRILL = {
+    'chord-book': `<path ${D} d="M24 12c-4.6-3.2-10.6-4.2-18-3.3v29.6c7.4-.9 13.4.1 18 3.3 4.6-3.2 10.6-4.2 18-3.3V8.7c-7.4-.9-13.4.1-18 3.3zM24 12v29.6"/><path ${D} stroke-width="1.4" d="M10.5 16.5h9.5M10.5 21.5h9.5M10.5 26.5h9.5M10.5 31.5h9.5M12.4 16.5v15M15.2 16.5v15M18 16.5v15"/><circle ${F} cx="15.2" cy="19" r="1.9"/><circle ${F} cx="18" cy="24" r="1.9"/><path ${D} stroke-width="1.4" d="M28.5 16.5h9v15h-9zM31.5 16.5v15M34.5 16.5v15"/><path ${F} d="M30.4 16.5h2.2v8.5h-2.2zM33.4 16.5h2.2v8.5h-2.2z"/>`,
     'note-reading': `${faint(17)}<ellipse ${F} cx="20" cy="31" rx="7" ry="5.3" transform="rotate(-20 20 31)"/><path ${D} stroke-width="3" d="M26.4 29V6.5"/>`,
     'key-signatures': `${faint(17)}<path ${D} stroke-width="2.8" d="M11 12v26M17.5 10v26M7.5 21l14-3.5M7.5 30l14-3.5"/><path ${D} stroke-width="2.8" d="M30 8v29c5-3 11-6 11-10.5 0-3.6-4.6-4.6-11-.8"/>`,
     chords: `${faint(17)}${head(21, 35)}${head(21, 27)}${head(21, 19)}<path ${D} stroke-width="2.8" d="M25 33.4V6"/>`,

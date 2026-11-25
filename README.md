@@ -18,6 +18,26 @@ It's best with a digital piano connected over MIDI, and works with an on-screen 
 | **Rhythm** | Read a rhythm on a one-line staff and tap it in time (any key, the pad, Space): five levels from whole notes to sixteenths, dotted rhythms, syncopation and rests. Every note is judged early or late; the rhythm figures you miss come back more often. |
 | **Metronome & timing** | A metronome that listens: 2/4 to 6/8, subdivisions, accent, tap tempo, and *silent bars* (the click drops out, you keep going). Every note you play is placed against the beat: how many ms early or late, your average and your spread. *Measure my delay* calibrates the delay of your setup; Play along uses it too. |
 
+### Chord book
+
+Not a drill: a reference for both instruments (**Chord book** at the top of the home page, and the book icon in the
+chord drills). Pick a root and one of 21 chord types (triads, sus, power chords, sixths, sevenths, add9 and ninths),
+type a symbol (`F#m7`, `Bb/D`, `CΔ7`, German `Fism7`, `B`, `H`), or play the chord on a MIDI keyboard. It shows the
+chord's notes with their degrees, then the ways to play it:
+
+- **Piano**: usual (close, root at the bottom), easy (root in the left hand, or without the fifth), broad (octaves,
+  spread over two hands) and every inversion, each on a keyboard and in notation with **finger numbers**, for the
+  right or the left hand.
+- **Guitar**: the usual shape (open chord, or the barre if there is none), an easy shape when the usual one needs a
+  big barre, the movable E, A and D shapes, the chord over its other bass notes (C/E, D/F♯), and every inversion on
+  three or four neighbouring strings: chord boxes with **fingers** and the root marked, and the tab beside them.
+
+The voicings are worked out in `shared/chordbook.js`, not stored: guitar shapes come from movable templates, the
+common open chords and a search over the neck, each given fingers by trying every grip (one finger per note, barres)
+and keeping the easiest. `tools/check.mjs` checks every chord on every root: right notes and bass, piano fingers
+that rise from the thumb within a hand's reach, guitar fingers that exist (at most four, no barre over an open
+string), plus shapes players know (F xx3211, C/E 032010, D/F♯ 200232, the 1 3 4 2 1 1 barre).
+
 ### Guitar
 
 The guitar course listens through the **microphone** (pitch detection with YIN, note onsets, and the pitch classes

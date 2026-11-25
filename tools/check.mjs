@@ -14,7 +14,7 @@ const SITE = path.join(ROOT, 'site');
 const ctx = { self: {} };
 vm.createContext(ctx);
 ctx.TextDecoder = TextDecoder; ctx.TextEncoder = TextEncoder;
-for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills', 'importer', 'guitar']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
+for (const f of ['theory', 'glyphs', 'staff', 'score', 'pieces', 'drills', 'importer', 'guitar', 'chordbook']) vm.runInContext(fs.readFileSync(path.join(SITE, 'shared', f + '.js'), 'utf8'), ctx, { filename: f + '.js' });
 const T = ctx.self.Theory, Staff = ctx.self.Staff;
 
 let failed = 0, passed = 0;
@@ -235,6 +235,86 @@ for (const p of ctx.self.PIECES) {
   }
 }
 
+// ---------- the chord book: every chord on every root, and every way it shows to play it ----------
+{
+  const CB = ctx.self.ChordBook;
+  const asc = n => T.name(n, { ascii: true });
+  const symA = c => CB.symbol(c, asc).replace(/♭/g, 'b');
+  const fretText = s => s.frets.map(f => (f < 0 ? 'x' : f)).join('');
+  let problems = 0;
+  const bad = what => { problems++; failed++; if (problems <= 30) console.error('✗ chord book: ' + what); };
+  for (const r of ['C', 'C#', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']) for (const ty of CB.TYPES) {
+    const root = P(r + '4');
+    const c = CB.chord(root, ty.id);
+    const name = symA(c);
+    // spelled by degree (a third is a third: C E♭ G♭ B𝄫, not C D♯ F♯ A)
+    for (const x of c.tones) if (T.mod(x.note.step - root.step, 7) !== T.mod(CB.DEG[x.degree][0], 7)) bad(`${name}: the ${x.degree} is spelled ${asc(x.note)}`);
+    const back = CB.parse(name);
+    if (!back || back.type !== ty.id || back.root.step !== root.step || back.root.alter !== root.alter) bad(`${name} doesn't read back`); else passed++;
+    // piano: the chord's notes, the right bass, fingers 1–5 rising from the thumb, one hand's reach, hands apart
+    for (const hand of ['rh', 'lh']) for (const v of CB.piano(c, { hand })) {
+      const all = [...v.lh, ...v.rh];
+      const pcs = new Set(all.map(x => T.mod(x.midi, 12)));
+      if ([...pcs].some(p => !c.pcs.includes(p))) bad(`${name} piano ${v.id}: a note outside the chord`);
+      if (v.id !== 'no5' && c.pcs.some(p => !pcs.has(p))) bad(`${name} piano ${v.id}: a chord tone is missing`);
+      for (const x of all) if (T.midi(x.note) !== x.midi) bad(`${name} piano ${v.id}: ${asc(x.note)} is not MIDI ${x.midi}`);
+      const low = all.reduce((a, b) => (a.midi < b.midi ? a : b));
+      if (v.inversion && low.tone !== c.tones[v.inversion]) bad(`${name} piano ${v.id}: wrong bass`);
+      if (['root', 'split', 'octave', 'spread', 'no5'].includes(v.id) && low.tone.degree !== '1') bad(`${name} piano ${v.id}: the root is not the bass`);
+      for (const [k, ns] of [['rh', v.rh], ['lh', v.lh]]) {
+        if (!ns.length) continue;
+        const fs = ns.map(x => x.finger);
+        if (!fs.every((f, i) => f >= 1 && f <= 5 && (i === 0 || (k === 'rh' ? f > fs[i - 1] : f < fs[i - 1])))) bad(`${name} piano ${v.id} ${k}: fingers ${fs.join('')}`);
+        if (ns.some((x, i) => i && x.midi <= ns[i - 1].midi)) bad(`${name} piano ${v.id} ${k}: notes not rising`);
+        if (ns[ns.length - 1].midi - ns[0].midi > 14) bad(`${name} piano ${v.id} ${k}: a reach of ${ns[ns.length - 1].midi - ns[0].midi} semitones`);
+      }
+      if (v.lh.length && v.rh.length && v.rh[0].midi <= v.lh[v.lh.length - 1].midi) bad(`${name} piano ${v.id}: the hands overlap`);
+      passed++;
+    }
+    // guitar: the chord's notes, the right bass, fingers a hand can do
+    const shapes = CB.guitar(c);
+    if (!shapes.some(s => s.cat === 'usual')) bad(`${name}: no usual guitar shape`);
+    for (const s of shapes) {
+      const what = `${name} guitar ${s.id} ${fretText(s)}`;
+      const snd = s.frets.map((f, i) => (f >= 0 ? CB.STD[i] + f : null)).filter(x => x !== null);
+      const pcs = new Set(snd.map(m => T.mod(m, 12)));
+      if ([...pcs].some(p => !c.pcs.includes(p))) bad(`${what}: a note outside the chord`);
+      if ((s.cat === 'small' ? c.pcs : CB.needed(c)).some(p => !pcs.has(p))) bad(`${what}: a chord tone is missing`);
+      const bassPc = T.mod(snd[0], 12);
+      if (['open', 'e-shape', 'a-shape', 'd-shape', 'full'].includes(s.id) && bassPc !== c.pcs[0]) bad(`${what}: the root is not the bass`);
+      if (s.over && bassPc !== s.over.pc) bad(`${what}: wrong bass`);
+      if (s.frets.some((f, i) => (f > 0) !== (s.fingers[i] > 0))) bad(`${what}: fingers don't match the frets`);
+      if (new Set(s.fingers.filter(Boolean)).size > 4) bad(`${what}: more than four fingers`);
+      const fr = s.frets.filter(f => f > 0);
+      if (fr.length && Math.max(...fr) - Math.min(...fr) > 3) bad(`${what}: a stretch over more than four frets`);
+      for (const b of s.barres) for (let st = b.from; st >= b.to; st--) if (s.frets[6 - st] < b.fret) bad(`${what}: a barre over an open, muted or lower string`);
+      const frets = {};
+      s.frets.forEach((f, i) => { if (f > 0) (frets[s.fingers[i]] ||= new Set()).add(f); });
+      if (Object.values(frets).some(x => x.size > 1)) bad(`${what}: one finger on two frets`);
+      passed++;
+    }
+  }
+  if (problems > 30) console.error(`  … and ${problems - 30} more`);
+  // shapes and fingerings players know
+  const G = text => { const p = CB.parse(text); return CB.guitar(CB.chord(p.root, p.type, p.bass)); };
+  eq(fretText(G('F').find(s => s.cat === 'easy')), 'xx3211', 'the easy F');
+  eq(G('C').filter(s => s.cat === 'inv').map(fretText), ['032010', '332010'], 'C/E and C/G');
+  eq([G('D/F#'), G('G/B'), G('Am/G'), G('Bb/D')].map(l => fretText(l[0])), ['200232', 'x20003', '302010', 'xx0331'], 'slash chords');
+  eq(G('F').find(s => s.id === 'e-shape').fingers.join(''), '134211', 'the E-shape barre: 1 3 4 2 1 1');
+  eq(G('C9').find(s => s.id === 'a-shape').fingers.join(''), '021333', 'C9 (x32333): 2 1 3 3 3');
+  const PF = (notes, hand) => CB.fingers(notes.split(' ').map(n => T.midi(P(n))), hand).join('');
+  eq(['C4 E4 G4', 'E4 G4 C5', 'G4 C5 E5'].map(n => PF(n, 'rh')), ['135', '125', '135'], 'right-hand triads: 1 3 5, 1 2 5, 1 3 5');
+  eq(['C3 E3 G3', 'E3 G3 C4', 'G3 C4 E4'].map(n => PF(n, 'lh')), ['531', '531', '521'], 'left-hand triads: 5 3 1, 5 3 1, 5 2 1');
+  eq([PF('C4 E4 G4 B4', 'rh'), PF('C3 E3 G3 B3', 'lh')], ['1235', '5321'], 'seventh chords: 1 2 3 5 and 5 3 2 1');
+  for (const [text, want, german] of [['F#m7', 'F#m7'], ['Bbmaj7', 'Bbmaj7'], ['C/E', 'C/E'], ['CΔ7', 'Cmaj7'], ['Cø', 'Cm7b5'], ['A-7', 'Am7'], ['Gm(maj7)', 'Gm(maj7)'],
+    ['Dadd9/F#', 'Dadd9/F#'], ['Fism7', 'F#m7', true], ['B', 'Bb', true], ['Hm', 'Bm', true], ['Esus4', 'Esus4', true], ['Es', 'Eb', true], ['Asm', 'Abm', true]]) {
+    const p = CB.parse(text, { german: !!german });
+    eq(p && symA(CB.chord(p.root, p.type, p.bass)), want, `reads ${text}`);
+  }
+  const I = ms => { const r = CB.identify(ms); return r && symA(CB.chord(r.root, r.type, r.bass)); };
+  eq([I([60, 64, 67]), I([64, 67, 72]), I([57, 60, 64, 67]), I([60, 64, 67, 69]), I([61, 65, 68])], ['C', 'C/E', 'Am7', 'C6', 'Db'], 'chords played on a keyboard');
+}
+
 // ---------- German: every text the pages show has a translation ----------
 {
   const de = { self: {} };
@@ -258,6 +338,8 @@ for (const p of ctx.self.PIECES) {
   for (const tu of Object.values(Gt.TUNINGS)) keys.set(tu.name, 'guitar.js tunings');
   for (const [, n] of Gt.GROUPS) keys.set(n, 'guitar.js chord groups');
   for (const p of [...Gt.STRUMS, ...Gt.PICKS]) keys.set(p.name, 'guitar.js patterns');
+  for (const ty of ctx.self.ChordBook.TYPES) keys.set(ty.name, 'chordbook.js types');
+  for (const [, n] of ctx.self.ChordBook.GROUPS) keys.set(n, 'chordbook.js groups');
   for (const n of ['C major', 'G major', 'A minor pentatonic', 'E minor pentatonic']) keys.set(n, 'guitar-tab scales');
   const ph = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(',');
   let missing = 0;

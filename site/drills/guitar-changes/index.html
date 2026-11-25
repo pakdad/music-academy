@@ -31,7 +31,7 @@
 (() => {
   const T = Theory, { h } = UI;
   const PROGS = [['G', 'C'], ['C', 'Am'], ['D', 'A'], ['Em', 'C'], ['A', 'D', 'E'], ['G', 'D', 'Em', 'C'], ['C', 'Am', 'Dm', 'G7'], ['Am', 'Dm', 'E'], ['E', 'A', 'B7'], ['C', 'G', 'Am', 'F']];
-  const page = UI.page({ drill: 'guitar-changes', title: t('Chord changes'), hud: false, tools: ['mic', 'sound'], keyboard: false, onSettings() {} });
+  const page = UI.page({ drill: 'guitar-changes', title: t('Chord changes'), hud: false, tools: ['mic', 'book'], keyboard: false, onSettings() {} });
   const stage = page.el.prompt.parentElement;
   stage.innerHTML = '';
   const st = { mode: 'metro', prog: 0, bpm: 60, beats: 4, ...UI.store.get('guitar-changes', {}) };

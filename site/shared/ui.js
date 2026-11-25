@@ -179,6 +179,8 @@
     kbBtn.classList.toggle('on', !!prefs.keyboard);
     const statsBtn = iconBtn('stats', t('Weak spots'), () => statsDialog(drill, opts.describe, () => opts.onSettings(settings)));
     const setBtn = iconBtn('settings', t('Settings for this drill'), () => openSettings());
+    // the chord book, for the instrument this page is about (guitar pages listen with the microphone)
+    const bookBtn = h('a', { class: 'iconbtn', href: '/drills/chord-book/#' + ((opts.tools || []).includes('mic') ? 'guitar' : 'piano'), title: t('Chord book'), 'aria-label': t('Chord book') }, Icons.el('book'));
     // inputs: MIDI (piano pages) and the microphone (guitar pages); a dot says whether they work
     const midiBtn = iconBtn('midi', 'MIDI', () => self.Toolbox ? Toolbox.open('check') : null);
     const micBtn = iconBtn('mic', t('Microphone'), () => self.Mic && (Mic.state === 'on' ? Mic.stop() : Mic.start()));
@@ -190,7 +192,7 @@
     const bar = h('header', { class: 'bar' },
       h('a', { class: 'iconbtn back', href: '/', title: ED.name || t('Home'), 'aria-label': t('Home') }, Icons.el('back')),
       h('h1', {}, t(title)), opts.hud === false ? h('div', { class: 'hud' }) : hud,
-      h('div', { class: 'tools' }, ...Object.entries({ mic: micBtn, midi: midiBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
+      h('div', { class: 'tools' }, ...Object.entries({ mic: micBtn, midi: midiBtn, book: bookBtn, keyboard: kbBtn, stats: statsBtn, settings: setBtn })
         .filter(([id]) => (opts.tools || ['midi', 'keyboard', 'stats', 'settings']).includes(id)).map(([, el]) => el)));
     const prompt = h('div', { class: 'prompt' });
     const card = h('div', { class: 'card' });

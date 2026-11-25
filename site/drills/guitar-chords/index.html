@@ -34,7 +34,7 @@
     { id: 'box', label: t('Chord box'), type: 'choice', options: [['always', t('Always')], ['miss', t('After a miss')], ['never', t('Never')]], show: s => s.mode === 'play' },
   ];
   const DEFAULTS = { mode: 'play', groups: ['open', 'minor'], box: 'always' };
-  const page = UI.page({ drill: 'guitar-chords', title: t('Chords'), settings: SPEC, defaults: DEFAULTS, tools: ['mic', 'sound', 'stats', 'settings'], keyboard: false,
+  const page = UI.page({ drill: 'guitar-chords', title: t('Chords'), settings: SPEC, defaults: DEFAULTS, tools: ['mic', 'book', 'stats', 'settings'], keyboard: false,
     describe: id => Guitar.chordName(Guitar.chordById(id)), onSettings: () => start() });
   const board = h('div', { class: 'board' });
   page.el.answers.after(board);

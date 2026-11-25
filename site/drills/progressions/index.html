@@ -40,7 +40,7 @@
   const DEFAULTS = { mode: 'read', tonality: 'major', maxKey: 3 };
 
   const page = UI.page({
-    drill: 'progressions', title: t('Progressions'), settings: SPEC, defaults: DEFAULTS,
+    drill: 'progressions', title: t('Progressions'), settings: SPEC, defaults: DEFAULTS, tools: ['midi', 'book', 'keyboard', 'stats', 'settings'],
     describe: item => {
       const p = item.split(':');
       if (p[0] === 'key') return t('Finding the key: {key}', { key: UI.keyName({ fifths: parseInt(p[1]), minor: p[1].endsWith('m') }) });

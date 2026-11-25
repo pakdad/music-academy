@@ -9,7 +9,7 @@
 //   |         a bar line (tools/check.mjs checks every bar adds up)
 //
 //   const L = Score.layout(piece, { width: 90, fingering: true })
-//     piece: { rh, lh, key, time: [3, 4], pickup (quarter notes before the first full bar), clef }
+//     piece: { rh, lh, key, time: [3, 4], pickup (quarter notes before the first full bar), clef, showTime: false (no time signature) }
 //     clef 'rhythm' draws a one-line staff for rhythm reading (write the notes as B4)
 //   el.innerHTML = L.svg
 //   L.events  [{ i, voice: 'rh' | 'lh', t (in quarter notes), d, midis, rest, m (bar) }]; drawn as <g class="ev" data-i>
@@ -123,7 +123,8 @@
     const keyW = sig.reduce((a, s) => a + (s.alter > 0 ? 1.15 : 1.05), 0) + (sig.length ? 0.7 : 0);
     const clefW = rhythm ? 2.6 : 3.7;
     const headOther = x0 + clefW + keyW + 0.4;
-    const headFirst = headOther + 0.8 + Math.max(...[num, den].map(n => String(n).split('').reduce((w, d) => w + GL['timeSig' + d].w, 0)));
+    const showTime = piece.showTime !== false; // false for a lone chord (the chord book)
+    const headFirst = !showTime ? headOther : headOther + 0.8 + Math.max(...[num, den].map(n => String(n).split('').reduce((w, d) => w + GL['timeSig' + d].w, 0)));
     const systems = [];
     let cur = { bars: [], head: headFirst, w: 0 };
     for (const b of bars) {
@@ -167,7 +168,7 @@
           for (let i = 0; i < 6; i++) out.push(line(x0, s.tops.tab + i * 1.5, s.right, s.tops.tab + i * 1.5, 0.13));
           out.push(`<rect class="tabbg" x="${f(x0 + 0.35)}" y="${f(s.tops.tab + 0.4)}" width="${f(1.9)}" height="${f(6.7)}"/>`);
           ['T', 'A', 'B'].forEach((c, i) => out.push(`<text class="tabclef" x="${f(x0 + 1.3)}" y="${f(s.tops.tab + 2.25 + i * 2)}" text-anchor="middle">${c}</text>`));
-          if (si === 0 && !notation) {
+          if (si === 0 && !notation && showTime) {
             const tx = x0 + clefW + 0.6;
             for (const [n, y] of [[num, s.tops.tab + 2.25], [den, s.tops.tab + 5.25]]) {
               let x = tx;
@@ -184,7 +185,7 @@
           out.push(use(ACC_GLYPH[a.alter], sx, Y(s, st, (a.alter > 0 ? SHARP_POS : FLAT_POS)[i] - (st === 'bass' ? 14 : 0))));
           sx += a.alter > 0 ? 1.15 : 1.05;
         });
-        if (si === 0) {
+        if (si === 0 && showTime) {
           // digits side by side (12/8), the shorter number centred over the longer
           const tx = sx + (sig.length ? 0.5 : 0.1);
           const width = n => String(n).split('').reduce((w, d) => w + GL['timeSig' + d].w, 0);

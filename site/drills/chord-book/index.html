@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17161a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/shared/app.css">
+<script src="/shared/edition.js"></script>
+<script src="/shared/i18n-de.js"></script>
+<script src="/shared/i18n.js"></script>
+<title>Chord book</title>
+</head>
+<body>
+<div id="app"></div>
+<script src="/shared/theory.js"></script>
+<script src="/shared/glyphs.js"></script>
+<script src="/shared/staff.js"></script>
+<script src="/shared/score.js"></script>
+<script src="/shared/audio.js"></script>
+<script src="/shared/input.js"></script>
+<script src="/shared/icons.js"></script>
+<script src="/shared/ui.js"></script>
+<script src="/shared/guitar.js"></script>
+<script src="/shared/chordbook.js"></script>
+<script src="/shared/toolbox.js"></script>
+<script>
+// The chord book: pick a root and a chord type (or type a symbol, or play the chord on a MIDI keyboard) and see
+// what the chord is made of and every usual way to play it on the piano or the guitar, with fingers.
+// Nothing is practised or counted here; the drills are elsewhere. The address keeps the chord (#guitar/F%23m7).
+(() => {
+  const T = Theory, CB = ChordBook, { h } = UI;
+  const page = UI.page({ drill: 'chord-book', title: t('Chord book'), hud: false, keyboard: false, tools: ['midi'], onSettings: () => {} });
+  const stage = page.el.prompt.parentElement;
+  stage.className = 'stage wide cb';
+  stage.replaceChildren();
+  const nn = n => UI.noteName(n);
+  const sym = c => CB.symbol(c, nn);
+  const german = UI.prefs.names === 'de';
+
+  // ---------- what is shown ----------
+  const saved = UI.store.get('chordbook', {});
+  const S = {
+    instrument: saved.instrument || (UI.store.get('instrument', 'piano') === 'guitar' ? 'guitar' : 'piano'),
+    hand: saved.hand === 'lh' ? 'lh' : 'rh',
+    root: saved.root ? T.parse(saved.root + '4') : T.parse('C4'),
+    type: CB.TYPE[saved.type] ? saved.type : 'maj',
+    bass: null,
+    spelled: !!saved.spelled, // the player chose this spelling (D♭ rather than C♯): keep it when the type changes
+  };
+  const ascii = n => T.name(n, { ascii: true });
+  function fromHash() {
+    const m = /^#(piano|guitar)(?:\/(.+))?$/.exec(location.hash);
+    if (!m) return;
+    S.instrument = m[1];
+    const p = m[2] && CB.parse(decodeURIComponent(m[2]));
+    if (p) { S.root = p.root; S.type = p.type; S.bass = p.bass; S.spelled = true; }
+  }
+  function save() {
+    UI.store.set('chordbook', { instrument: S.instrument, hand: S.hand, root: ascii(S.root), type: S.type, spelled: S.spelled });
+    const c = CB.chord(S.root, S.type, S.bass);
+    history.replaceState(null, '', `#${S.instrument}/${encodeURIComponent(ascii(c.root) + c.type.sym.replace(/♭/g, 'b') + (c.bass ? '/' + ascii(c.bass.note) : ''))}`);
+  }
+  fromHash();
+
+  // ---------- the picker: instrument, a search box, roots, chord types ----------
+  const picker = h('section', { class: 'cb-pick' });
+  const heard = h('div', { class: 'cb-heard', 'aria-live': 'polite' });
+  const head = h('section', { class: 'card cb-head' });
+  const body = h('div', { class: 'cb-body' });
+  stage.append(picker, head, body);
+
+  const search = h('input', { class: 'text', type: 'search', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'go',
+    placeholder: t('Type a chord: Am7, F#, Bb/D'), 'aria-label': t('Type a chord') });
+  search.addEventListener('input', () => {
+    const p = CB.parse(search.value, { german });
+    search.classList.toggle('bad', !!search.value.trim() && !p);
+    if (!p) return;
+    Object.assign(S, { root: p.root, type: p.type, bass: p.bass, spelled: true });
+    draw();
+  });
+  search.addEventListener('keydown', e => { if (e.key === 'Enter') search.blur(); });
+
+  // (built once, so the search box keeps its focus while the rest redraws)
+  const instr = h('div', { class: 'instr cb-instr', role: 'tablist' });
+  const choices = h('div', { class: 'cb-choices' });
+  picker.append(h('div', { class: 'cb-row' }, instr, h('label', { class: 'cb-search' }, Icons.el('search', 20), search)), heard, choices);
+  function drawPicker() {
+    instr.replaceChildren();
+    for (const [id, label] of [['piano', t('Piano')], ['guitar', t('Guitar')]]) {
+      instr.append(h('button', { role: 'tab', class: 'instr-btn' + (S.instrument === id ? ' on' : ''), 'aria-selected': S.instrument === id ? 'true' : 'false',
+        onclick: () => { S.instrument = id; draw(); } }, Icons.el(id, 24), h('span', {}, label)));
+    }
+
+    // the twelve roots; a black key shows both of its names
+    const roots = h('div', { class: 'cb-roots', role: 'group', 'aria-label': t('Root') });
+    for (let pc = 0; pc < 12; pc++) {
+      const black = [1, 3, 6, 8, 10].includes(pc);
+      const on = T.pc(S.root) === pc;
+      const label = black ? `${nn(T.spell(pc + 60, 1))}/${nn(T.spell(pc + 60, -1))}` : nn(T.spell(pc + 60, 0));
+      roots.append(h('button', { class: 'cb-root' + (black ? ' black' : '') + (on ? ' on' : ''), 'aria-pressed': on ? 'true' : 'false',
+        onclick: () => { Object.assign(S, { root: CB.rootFor(pc, S.type), bass: null, spelled: false }); search.value = ''; draw(); } }, label));
+    }
+    // the chord types, each showing its symbol on this root
+    const types = h('div', { class: 'cb-types' });
+    for (const [gid, gname] of CB.GROUPS) {
+      const row = h('div', { class: 'cb-tgroup' });
+      for (const ty of CB.TYPES.filter(x => x.group === gid)) {
+        const on = ty.id === S.type;
+        row.append(h('button', { class: 'cb-type' + (on ? ' on' : ''), 'aria-pressed': on ? 'true' : 'false', title: t(ty.name),
+          onclick: () => { S.type = ty.id; S.bass = null; if (!S.spelled) S.root = CB.rootFor(T.pc(S.root), ty.id); search.value = ''; draw(); } },
+        h('b', {}, nn(S.root) + ty.sym), h('small', {}, t(ty.name))));
+      }
+      types.append(h('div', { class: 'cb-tg' }, h('span', { class: 'cb-tg-name' }, t(gname)), row));
+    }
+    choices.replaceChildren(roots, types);
+  }
+
+  // ---------- sound ----------
+  const midisOf = v => [...(v.lh || []), ...(v.rh || [])].map(x => x.midi).sort((a, b) => a - b);
+  function play(midis, how = 'block') {
+    Sound.unlock();
+    if (S.instrument === 'guitar') {
+      if (how === 'block') Sound.strum(midis, { dur: 2.2 });
+      else midis.forEach((m, i) => Sound.pluck(m, { at: i * 0.22, dur: 1.6 }));
+    } else if (how === 'block') Sound.chord(midis, { dur: 1.8 });
+    else Sound.sequence(midis.map(m => [m]), { gap: 0.3, dur: 1.4 });
+  }
+
+  // ---------- drawings ----------
+  // a stretch of piano keyboard with the chord's keys and fingers (right hand filled, left hand outlined)
+  function keyboard(v) {
+    const marks = new Map();
+    for (const x of v.lh || []) marks.set(x.midi, { hand: 'lh', finger: x.finger });
+    for (const x of v.rh || []) marks.set(x.midi, { hand: 'rh', finger: x.finger });
+    const ms = [...marks.keys()];
+    let lo = Math.min(...ms), hi = Math.max(...ms);
+    lo -= T.mod(lo, 12); hi += 11 - T.mod(hi, 12);
+    if (hi - lo < 23) hi = lo + 23;
+    const BLACK = [1, 3, 6, 8, 10];
+    const W = 20, H = 86, BW = 12, BH = 54;
+    const x = {}; let n = 0;
+    for (let m = lo; m <= hi; m++) if (!BLACK.includes(T.mod(m, 12))) x[m] = n++ * W;
+    const out = [];
+    const dot = (m, cx, cy) => {
+      const k = marks.get(m);
+      return `<g class="kf ${k.hand}"><circle cx="${cx}" cy="${cy}" r="7.5"/><text x="${cx}" y="${cy + 4}" text-anchor="middle">${k.finger}</text></g>`;
+    };
+    for (let m = lo; m <= hi; m++) if (x[m] !== undefined) {
+      out.push(`<rect class="k white${marks.has(m) ? ' on ' + marks.get(m).hand : ''}" data-m="${m}" x="${x[m] + 0.5}" y="0.5" width="${W - 1}" height="${H}" rx="2.5"/>`);
+      if (T.mod(m, 12) === 0) out.push(`<text class="kl" x="${x[m] + W / 2}" y="${H + 12}" text-anchor="middle">C${m / 12 - 1}</text>`);
+    }
+    for (let m = lo; m <= hi; m++) if (x[m] === undefined) out.push(`<rect class="k black${marks.has(m) ? ' on ' + marks.get(m).hand : ''}" data-m="${m}" x="${x[m - 1] + W - BW / 2}" y="0.5" width="${BW}" height="${BH}" rx="2"/>`);
+    for (const m of ms) out.push(x[m] !== undefined ? dot(m, x[m] + W / 2, H - 13) : dot(m, x[m - 1] + W, BH - 11));
+    const width = n * W + 1;
+    return `<svg class="cb-kb" viewBox="0 0 ${width} ${H + 16}" role="img" aria-label="${t('Keyboard')}">${out.join('')}</svg>`;
+  }
+
+  // a chord box: strings from the low E (left) to the high e, frets downwards; the root as a square
+  function chordBox(s) {
+    const left = Guitar.settings().left;
+    const fretted = s.frets.filter(f => f > 0);
+    const top = fretted.length ? Math.max(...fretted) : 0;
+    const base = top <= 4 ? 1 : Math.min(...fretted);
+    const rows = Math.max(4, top - base + 1);
+    const SW = 24, FH = 27, X0 = 34, Y0 = 30, W = X0 + SW * 5 + 22, H = Y0 + rows * FH + 30;
+    const sx = i => X0 + (left ? 5 - i : i) * SW; // i: 0 = low E
+    const fy = f => Y0 + (f - base + 0.5) * FH;
+    const out = [];
+    for (let r = 0; r <= rows; r++) out.push(`<line class="${r === 0 && base === 1 ? 'nut' : 'fret'}" x1="${X0}" y1="${Y0 + r * FH}" x2="${X0 + SW * 5}" y2="${Y0 + r * FH}"/>`);
+    for (let i = 0; i < 6; i++) out.push(`<line class="string" x1="${sx(i)}" y1="${Y0}" x2="${sx(i)}" y2="${Y0 + rows * FH}"/>`);
+    if (base > 1) out.push(`<text class="dbase" x="${left ? X0 + SW * 5 + 8 : X0 - 9}" y="${fy(base) + 4}" text-anchor="${left ? 'start' : 'end'}">${base}</text>`);
+    const inBarre = new Set();
+    for (const b of s.barres) {
+      const a = 6 - b.from, z = 6 - b.to; // indices
+      const xa = Math.min(sx(a), sx(z)), xb = Math.max(sx(a), sx(z));
+      for (let i = a; i <= z; i++) if (s.frets[i] === b.fret) inBarre.add(i);
+      out.push(`<rect class="dot" x="${xa - 9}" y="${fy(b.fret) - 9}" width="${xb - xa + 18}" height="18" rx="9"/><text class="dfinger" x="${(xa + xb) / 2}" y="${fy(b.fret) + 4}" text-anchor="middle">${b.finger}</text>`);
+    }
+    s.frets.forEach((f, i) => {
+      const n = s.notes[i];
+      if (f < 0) out.push(`<text class="dmute" x="${sx(i)}" y="${Y0 - 8}" text-anchor="middle">×</text>`);
+      else if (f === 0) out.push(`<circle class="dopen${n.tone && n.tone.degree === '1' ? ' root' : ''}" cx="${sx(i)}" cy="${Y0 - 13}" r="5"/>`);
+      else if (!inBarre.has(i)) {
+        const root = n.tone && n.tone.degree === '1';
+        out.push(root ? `<rect class="dot root" x="${sx(i) - 9}" y="${fy(f) - 9}" width="18" height="18" rx="3"/>` : `<circle class="dot" cx="${sx(i)}" cy="${fy(f)}" r="9.5"/>`);
+        if (s.fingers[i]) out.push(`<text class="dfinger${root ? ' root' : ''}" x="${sx(i)}" y="${fy(f) + 4}" text-anchor="middle">${s.fingers[i]}</text>`);
+      }
+      if (n) out.push(`<text class="dnote${i === s.frets.findIndex(x => x >= 0) ? ' bass' : ''}" x="${sx(i)}" y="${H - 8}" text-anchor="middle">${nn(n.note)}</text>`);
+    });
+    return `<svg class="diagram cb-box" viewBox="0 0 ${W} ${H}" role="img">${out.join('')}</svg>`;
+  }
+
+  // notation (with fingers for the piano; with tab for the guitar)
+  const tok = (notes, fingers) => notes.map(x => T.name(x.note, { ascii: true, octave: true }) + (fingers && x.finger ? '@' + x.finger : '')).join('+') + ':1';
+  function pianoScore(v) {
+    const piece = { time: [4, 4], showTime: false };
+    if (v.rh.length) piece.rh = tok(v.rh, true);
+    if (v.lh.length) piece.lh = tok(v.lh, true);
+    return Score.layout(piece, { width: piece.rh && piece.lh ? 13 : 11, fingering: true }).svg;
+  }
+  function guitarTab(s) {
+    const notes = s.notes.filter(Boolean);
+    const rh = notes.map(n => `${T.name(CB.place(n.note, n.midi + 12), { ascii: true, octave: true })}^${n.string}.${n.fret}`).join('+') + ':1';
+    return Score.layout({ clef: 'guitar', tab: true, notation: false, time: [4, 4], showTime: false, rh }, { width: 10 }).svg;
+  }
+
+  // ---------- the chord ----------
+  const ORD = ['', '1st inversion', '2nd inversion', '3rd inversion'];
+  const bassText = note => t('{note} in the bass', { note: nn(note) });
+  const slashOf = (c, tone) => sym(CB.chord(c.root, c.type.id, tone.note));
+  function pianoTitle(c, v) {
+    const low = (v.lh.length ? v.lh : v.rh)[0];
+    const x = v.lh.length === 2 && v.lh[1].tone !== v.lh[0].tone ? v.lh[1].tone : null;
+    switch (v.id) {
+      case 'slash': return [sym(c), t('{note} in the left hand, the chord above', { note: nn(c.bass.note) })];
+      case 'root': return [t('Root position'), bassText(low.note)];
+      case 'split': return [t('Root in the left hand'), t('The right hand plays the rest, close together')];
+      case 'no5': return [t('Without the fifth'), t('The fifth adds the least: leave it out')];
+      case 'octave': return [t('Full, with octaves'), t('The root doubled in the left hand')];
+      case 'spread': return [t('Spread'), x ? t('Root and {deg} in the left hand, the rest above', { deg: x.label }) : t('The root in the left hand, the rest above')];
+      default: return [t(ORD[v.inversion]), `${bassText(low.note)} · ${slashOf(c, low.tone)}`];
+    }
+  }
+  function guitarTitle(c, s) {
+    const where = s.pos > 0 && !s.opens ? t('fret {n}', { n: s.pos }) : '';
+    const inv = s.over ? (s.over.degree === '1' ? t('Root position') : t(ORD[s.over.i] || '') ) : '';
+    switch (s.id) {
+      case 'open': return [s.opens ? t('Open chord') : t('First position'), bassText(s.bassNote)];
+      case 'e-shape': return [t('Root on the 6th string'), [t('E shape'), t('fret {n}', { n: s.fret })].join(' · ')];
+      case 'a-shape': return [t('Root on the 5th string'), [t('A shape'), t('fret {n}', { n: s.fret })].join(' · ')];
+      case 'd-shape': return [t('Root on the 4th string'), [t('D shape, four strings'), t('fret {n}', { n: s.fret })].join(' · ')];
+      case 'full': return [t('Full chord'), [bassText(s.bassNote), where].filter(Boolean).join(' · ')];
+      case 'easy': return [t('Easy version'), [t('{n} strings, no big barre', { n: s.strings }), where].filter(Boolean).join(' · ')];
+      case 'slash': return [s.over ? slashOf(c, s.over) : sym(c), [bassText(s.bassNote), where].filter(Boolean).join(' · ')];
+      case 'top3': case 'mid3': case 'top4': return [inv, [{ top3: t('top three strings'), mid3: t('middle strings'), top4: t('top four strings') }[s.id], s.over.degree === '1' ? '' : slashOf(c, s.over), where].filter(Boolean).join(' · ')];
+      default: return ['', ''];
+    }
+  }
+  const SECTIONS = {
+    piano: [
+      ['usual', t('Usual'), t('All the notes close together, the root at the bottom: the chord as written in a chord chart.')],
+      ['easy', t('Easy'), t('Less to hold: the root alone in the left hand, or the fifth left out.')],
+      ['broad', t('Broad: two hands'), t('A fuller sound: the root doubled in octaves, or the chord spread out over both hands.')],
+      ['inv', t('Inversions'), t('Another chord tone at the bottom. Inversions keep the hand still between chords; the bass note gives the slash name (C/E).')],
+    ],
+    guitar: [
+      ['usual', t('Usual'), t('The shape most players learn first.')],
+      ['easy', t('Easy'), t('A smaller shape on the top strings, without the big barre.')],
+      ['movable', t('Barre and movable shapes'), t('The same grip moves up and down the neck and makes this chord on every root. The square is the root.')],
+      ['inv', t('Other bass notes'), t('The full chord with another chord tone in the bass (C/E, C/G).')],
+      ['small', t('Inversions on three or four strings'), t('Every inversion on neighbouring strings: small shapes for higher up the neck.')],
+    ],
+  };
+  const SEC_ICON = { usual: 'check', easy: 'hand', broad: 'piano', inv: 'again', movable: 'guitar', small: 'notes' };
+
+  function drawHead(c, list) {
+    head.replaceChildren();
+    const midis = (() => { let m = 59; return c.tones.map(x => (m = m + 1 + T.mod(x.pc - m - 1, 12))); })(); // upwards from middle C
+    const all = c.tones.map((x, i) => CB.place(x.note, midis[i]));
+    const playBtn = h('button', { class: 'btn primary', onclick: () => play(midis) }, UI.ilabel('play', t('Listen')));
+    const arpBtn = h('button', { class: 'btn ghost', onclick: () => play(midis, 'arp') }, UI.ilabel('notes', t('One by one')));
+    const other = !S.bass && CB.enharmonic(c.root);
+    const alsoBtn = other ? h('button', { class: 'linkbtn', onclick: () => { S.root = other; S.spelled = true; draw(); } },
+      t('Also written {chord}', { chord: sym(CB.chord(other, c.type.id)) })) : null;
+    // the chord's notes: each with its degree; a tap plays it
+    const tones = h('div', { class: 'cb-tones' }, c.tones.map((x, i) => h('button', { class: 'cb-tone' + (x.degree === '1' ? ' root' : ''), onclick: () => { Sound.unlock(); Sound.note(midis[i]); } },
+      h('b', {}, nn(x.note)), h('small', {}, x.label),
+      Math.abs(x.note.alter) === 2 ? h('em', {}, '= ' + nn(T.spell(T.midi(x.note), 0))) : null)));
+    if (c.bass && c.bass.degree === null) tones.append(h('span', { class: 'cb-tone bass' }, h('b', {}, nn(c.bass.note)), h('small', {}, t('in the bass'))));
+    const staff = h('div', { class: 'cb-staff', html: Score.layout({ rh: all.map(n => T.name(n, { ascii: true, octave: true })).join('+') + ':1', time: [4, 4], showTime: false }, { width: 10 }).svg });
+    // which hand the one-hand piano shapes are fingered for
+    let handSeg = null;
+    if (S.instrument === 'piano') {
+      const seg = h('div', { class: 'seg cb-hand', role: 'group', 'aria-label': t('Fingers for') });
+      for (const [id, label] of [['rh', t('Right hand')], ['lh', t('Left hand')]]) seg.append(h('button', { class: S.hand === id ? 'on' : '', onclick: () => { S.hand = id; draw(); } }, label));
+      handSeg = h('div', { class: 'cb-hand-wrap' }, h('span', { class: 'muted' }, t('One hand:')), seg);
+    }
+    head.append(
+      h('div', { class: 'cb-title' },
+        h('div', {}, h('h2', {}, sym(c)), h('div', { class: 'cb-full' }, t(c.type.name), ' · ', t('Notes: {formula}', { formula: c.tones.map(x => x.label).join(' ') }), alsoBtn ? ' · ' : null, alsoBtn)),
+        h('div', { class: 'cb-actions' }, h('div', { class: 'cb-actions-row' }, playBtn, arpBtn), handSeg)),
+      h('div', { class: 'cb-notes-row' }, tones, staff));
+    // jump to a section; the hand for one-hand piano shapes
+    const jump = h('nav', { class: 'cb-jump' });
+    for (const [id, name] of SECTIONS[S.instrument]) if (list.some(v => v.cat === id)) {
+      jump.append(h('a', { class: 'chip', href: '#', onclick: e => { e.preventDefault(); document.getElementById('cb-' + id).scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, Icons.el(SEC_ICON[id], 16), h('b', {}, name)));
+    }
+    head.append(jump);
+  }
+
+  function card(title, sub, midis, ...kids) {
+    return h('article', { class: 'card cb-card' },
+      h('header', {}, h('div', {}, h('b', {}, title), sub ? h('span', { class: 'muted' }, sub) : null),
+        h('button', { class: 'iconbtn', title: t('Listen'), 'aria-label': t('Listen'), onclick: () => play(midis) }, Icons.el('play'))),
+      ...kids);
+  }
+
+  function draw() {
+    save();
+    drawPicker();
+    const c = CB.chord(S.root, S.type, S.bass);
+    document.title = `${sym(c)} · ${t('Chord book')} · ${(self.EDITION || {}).name || 'Music Academy'}`;
+    const list = S.instrument === 'piano' ? CB.piano(c, { hand: S.hand }) : CB.guitar(c);
+    drawHead(c, list);
+    body.replaceChildren();
+    for (const [id, name, about] of SECTIONS[S.instrument]) {
+      const vs = list.filter(v => v.cat === id);
+      if (!vs.length) continue;
+      const grid = h('div', { class: 'cb-grid' + (S.instrument === 'guitar' ? ' gtr' : '') });
+      for (const v of vs) {
+        if (S.instrument === 'piano') {
+          const [title, sub] = pianoTitle(c, v);
+          const hands = [['rh', t('Right hand')], ['lh', t('Left hand')]].filter(([k]) => v[k].length).map(([k, label]) =>
+            h('div', { class: 'cb-hand-line' }, h('small', {}, label), h('b', {}, v[k].map(x => nn(x.note)).join(' · ')), h('span', { class: 'cb-fing' }, t('fingers {f}', { f: v[k].map(x => x.finger).join(' ') }))));
+          const kb = h('div', { class: 'cb-kbwrap', html: keyboard(v) });
+          kb.addEventListener('pointerdown', e => { const k = e.target.closest?.('[data-m]'); if (k) { Sound.unlock(); Sound.note(+k.dataset.m); } });
+          grid.append(card(title, sub, midisOf(v), kb, h('div', { class: 'cb-lower' }, h('div', { class: 'cb-score', html: pianoScore(v) }), h('div', { class: 'cb-hands' }, ...hands))));
+        } else {
+          const [title, sub] = guitarTitle(c, v);
+          const midis = v.notes.filter(Boolean).map(n => n.midi);
+          const box = h('div', { class: 'cb-boxwrap', html: chordBox(v), title: t('Listen'), onclick: () => play(midis) });
+          grid.append(card(title, sub, midis, h('div', { class: 'cb-gbody' }, box, h('div', { class: 'cb-tab', html: guitarTab(v) }))));
+        }
+      }
+      body.append(h('section', { class: 'cb-sec', id: 'cb-' + id }, h('h3', {}, Icons.el(SEC_ICON[id], 20), name), h('p', { class: 'muted' }, about), grid));
+    }
+    if (S.instrument === 'guitar') {
+      const g = Guitar.settings();
+      body.append(h('p', { class: 'muted cb-foot' }, t('Shapes for standard tuning (E A D G B E). Numbers are fingers: 1 index, 2 middle, 3 ring, 4 little.') +
+        (g.tuning !== 'standard' || g.capo ? ' ' + t('Your guitar is set to another tuning or a capo; these shapes ignore that.') : '')));
+    } else body.append(h('p', { class: 'muted cb-foot' }, t('Numbers are fingers: 1 thumb, 2 index, 3 middle, 4 ring, 5 little.')));
+  }
+
+  // ---------- a chord played on a MIDI keyboard is looked up ----------
+  let settle = null;
+  Input.on(e => {
+    if (e.type !== 'on') return;
+    clearTimeout(settle);
+    settle = setTimeout(() => {
+      const held = [...Input.held];
+      if (held.length < 2) return;
+      const id = CB.identify(held);
+      if (!id) { heard.textContent = t('These notes are not a chord in the book.'); return; }
+      Object.assign(S, { root: id.root, type: id.type, bass: id.bass, spelled: false });
+      search.value = '';
+      draw();
+      heard.textContent = t('You played {chord}.', { chord: sym(CB.chord(id.root, id.type, id.bass)) });
+    }, 180);
+  });
+  Input.onStatus(({ state }) => { if (state === 'ready' && !heard.textContent) heard.textContent = t('Play a chord on your keyboard to look it up.'); });
+
+  addEventListener('hashchange', () => { fromHash(); draw(); });
+  draw();
+  self.__state = () => ({ S });
+})();
+</script>
+</body>
+</html>
