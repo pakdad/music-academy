@@ -1,0 +1,7 @@
+# Response headers on Cloudflare Pages (the nginx image sets the same ones in nginx.conf).
+# no-cache = always ask for a newer version first, so a release reaches everyone at once.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: midi=(self), microphone=(self), camera=(), geolocation=()
+  Cache-Control: no-cache
